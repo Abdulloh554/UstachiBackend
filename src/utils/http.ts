@@ -23,7 +23,8 @@ export const notFound: RequestHandler = (req, res) => {
 export const errorHandler: (err: any, req: Request, res: Response, next: NextFunction) => Response | void = (
   err,
   req,
-  res
+  res,
+  next
 ) => {
   if (err instanceof ApiError) {
     return res.status(err.statusCode).json({ error: err.message });
