@@ -28,16 +28,6 @@ export async function main(): Promise<Server> {
       : env.CORS_ALLOWED_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean);
   app.use(cors({ origin: corsOrigins, credentials: true }));
 
-  app.use((req, res, next) => {
-    const unsafe = ['POST', 'PUT', 'PATCH', 'DELETE'];
-    if (env.NODE_ENV !== 'production' || !unsafe.includes(req.method)) return next();
-    const origin = req.headers.origin || '';
-    if (!origin) return next();
-    const allowed = Array.isArray(corsOrigins) ? corsOrigins : [];
-    if (allowed.includes(origin)) return next();
-    return res.status(403).json({ error: "So'rov kelib chiqish manbasi (Origin) ruxsat etilmagan" });
-  });
-
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: true, limit: '1mb' }));
   if (env.NODE_ENV !== 'test') {

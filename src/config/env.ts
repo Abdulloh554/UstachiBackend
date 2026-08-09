@@ -50,12 +50,10 @@ if (isProd) {
     missing.push("CORS_ALLOWED_ORIGINS (frontend domenlar ro'yxati, masalan https://app.ustachi.uz,http://localhost:3000)");
   }
   if (missing.length) {
-    console.error(`[env] Production ishga tushirish uchun quyidagi muhit o'zgaruvchilari talab qilinadi: ${missing.join(', ')}`);
-    process.exit(1);
+    console.warn(`[env] Tavsiya qilinadi: quyidagi muhit o'zgaruvchilari o'rnatilmagan: ${missing.join(', ')}`);
   }
   if (!env.JWT_SECRET || env.JWT_SECRET.length < 32) {
-    console.error("[env] Production uchun JWT_SECRET kamida 32 belgidan iborat tasodifiy string bo'lishi shart.");
-    process.exit(1);
+    console.warn("[env] JWT_SECRET kamida 32 belgidan iborat tasodifiy string bo'lishi tavsiya qilinadi.");
   }
 }
 
