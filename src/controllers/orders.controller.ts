@@ -64,7 +64,9 @@ export const list = asyncHandler(async (req: Request, res: Response) => {
   ]);
 
   await attachOrderMeta(docs, req.user);
-  res.json(paginatedResponse(page, pageSize, total, docs, `${req.baseUrl}`));
+  res.json(
+    paginatedResponse(page, pageSize, total, docs.map((d) => orderSerializer(d, req.user)), `${req.baseUrl}`)
+  );
 });
 
 export const create = asyncHandler(async (req: Request, res: Response) => {
