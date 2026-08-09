@@ -1,28 +1,47 @@
 {
   "name": "ustachi-backend",
   "version": "1.0.0",
-  "description": "Ustachi backend (Node.js + Express + MongoDB) - usta xizmatlari platformasi",
-  "main": "src/server.js",
+  "description": "Ustachi backend (Node.js + Express + MongoDB, TypeScript) - usta xizmatlari platformasi",
+  "main": "dist/server.js",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "nodemon src/server.js",
-    "seed": "node src/scripts/seed.js"
+    "start": "node dist/server.js",
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "seed": "tsx src/scripts/seed.ts",
+    "seed:demo": "tsx src/scripts/seed-demo.ts",
+    "test:api": "tsx src/scripts/test-api.ts",
+    "test:ws": "tsx src/scripts/test-ws.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.5.1",
     "morgan": "^1.10.0",
-    "multer": "^1.4.5-lts.1",
+    "multer": "^2.0.1",
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.4"
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cookie-parser": "^1.4.7",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/morgan": "^1.9.9",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^20.14.0",
+    "@types/ws": "^8.5.12",
+    "mongodb-memory-server": "^9.4.1",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.4"
   }
 }
