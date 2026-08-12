@@ -7,6 +7,23 @@ import { parsePage, paginatedResponse } from '../utils/pagination';
 
 const USER_FIELDS = 'phone username role avatar language theme location_lat location_lng first_name last_name';
 
+const CANCELABLE_STATUSES: string[] = [
+  ORDER_STATUSES.NEW,
+  ORDER_STATUSES.ACCEPTED,
+  ORDER_STATUSES.COMING,
+  ORDER_STATUSES.IN_PROGRESS,
+  ORDER_STATUSES.FAILED,
+];
+
+function parseOrderPrice(value: any): number | null {
+  if (value === '' || value === null || value === undefined) return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) {
+    throw new ApiError(400, "Narx manfiy yoki noto'g'ri bo'lishi mumkin emas");
+  }
+  return n;
+}
+
 const populateOrder = (query: any) =>
   query
     .populate('client', USER_FIELDS)
@@ -87,7 +104,7 @@ export const create = asyncHandler(async (req: Request, res: Response) => {
     location_lat,
     location_lng,
     address,
-    price: price === '' || price === null ? null : Number(price),
+    price: parseOrderPrice(price),
   });
 
   await OrderStatusLog.create({
@@ -133,7 +150,7 @@ export const update = asyncHandler(async (req: Request, res: Response) => {
   for (const field of allowed) {
     if (field in req.body) {
       if (field === 'price') {
-        order.price = req.body.price === '' || req.body.price === null ? null : Number(req.body.price);
+        order.price = parseOrderPrice(req.body.price);
       } else if (field === 'profession') {
         order.profession = req.body.profession || null;
       } else {
@@ -230,6 +247,9 @@ export const cancel = asyncHandler(async (req: Request, res: Response) => {
   }
   if (order.status === ORDER_STATUSES.CANCELLED) {
     throw new ApiError(400, 'Buyurtma allaqachon bekor qilingan');
+  }
+  if (!CANCELABLE_STATUSES.includes(order.status)) {
+    throw new ApiError(400, "Bu holatda buyurtmani bekor qilib bo'lmaydi");
   }
 
   const oldStatus = order.status;

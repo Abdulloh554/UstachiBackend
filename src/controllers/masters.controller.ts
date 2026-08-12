@@ -15,47 +15,63 @@ import { populateOrder, attachOrderMeta } from './orders.controller';
 const USER_FIELDS = 'phone username role avatar language theme location_lat location_lng first_name last_name';
 
 export const list = asyncHandler(async (req: Request, res: Response) => {
-  let docs: any[] = await MasterProfile.find({ is_available: true })
-    .populate('user', USER_FIELDS)
-    .populate('professions');
+  const { page, pageSize, skip } = parsePage(req);
+  const filter: any = { is_available: true };
 
-  if (req.query.professions) {
-    const ids = String(req.query.professions).split(',').map((s) => String(s).trim()).filter(Boolean);
-    if (ids.length) {
-      docs = docs.filter((d) => d.professions.some((p: any) => ids.includes(String(p._id))));
+  const profIds = String(req.query.professions || '')
+    .split(',')
+    .map((s) => String(s).trim())
+    .filter(Boolean);
+  if (profIds.length) filter.professions = { $in: profIds };
+
+  const q = String(req.query.search || '').trim();
+  if (q) {
+    const pattern = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(pattern, 'i');
+    const $or: any[] = [
+      { 'user.first_name': re },
+      { 'user.last_name': re },
+      { bio: re },
+      {
+        $expr: {
+          $regexMatch: {
+            input: { $concat: ['$user.first_name', ' ', '$user.last_name'] },
+            regex: pattern,
+            options: 'i',
+          },
+        },
+      },
+    ];
+    const profByName = await Profession.find({
+      $or: [{ name_uz: re }, { name_ru: re }],
+    }).select('_id');
+    if (profByName.length) {
+      $or.push({ professions: { $in: profByName.map((p) => p._id) } });
     }
-  }
-
-  if (req.query.search) {
-    const q = String(req.query.search).toLowerCase();
-    docs = docs.filter((d) => {
-      const name = [d.user.first_name, d.user.last_name].join(' ').toLowerCase();
-      const bio = (d.bio || '').toLowerCase();
-      const proNames = d.professions.map((p: any) => p.name_uz).join(' ').toLowerCase();
-      return name.includes(q) || bio.includes(q) || proNames.includes(q);
-    });
+    filter.$or = $or;
   }
 
   const ordering = String(req.query.ordering || '-rating');
   const dir = ordering.startsWith('-') ? -1 : 1;
   const field = ordering.replace(/^-/, '');
   const allowedOrder = ['rating', 'rating_count', 'experience_years'];
-  if (allowedOrder.includes(field)) {
-    docs.sort((a, b) => {
-      const av = a[field] || 0;
-      const bv = b[field] || 0;
-      return (av - bv) * dir;
-    });
-  }
+  const sort: any = allowedOrder.includes(field) ? { [field]: dir } : { rating: -1 };
 
-  const { page, pageSize, skip } = parsePage(req);
-  const total = docs.length;
-  const pageDocs = docs.slice(skip, skip + pageSize);
+  const [total, docs] = await Promise.all([
+    MasterProfile.countDocuments(filter),
+    MasterProfile.find(filter)
+      .populate('user', USER_FIELDS)
+      .populate('professions')
+      .sort(sort)
+      .skip(skip)
+      .limit(pageSize),
+  ]);
+
   res.json({
     count: total,
     next: page * pageSize < total ? page + 1 : null,
     previous: page > 1 ? page - 1 : null,
-    results: pageDocs.map(masterListSerializer),
+    results: docs.map(masterListSerializer),
   });
 });
 

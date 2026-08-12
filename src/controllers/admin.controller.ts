@@ -72,9 +72,13 @@ export const masters = asyncHandler(async (req: Request, res: Response) => {
 
 export const orders = asyncHandler(async (req: Request, res: Response) => {
   const { page, pageSize, skip } = parsePage(req);
+  const filter: any = {};
+  if (req.query.status && (Object.values(ORDER_STATUSES) as string[]).includes(String(req.query.status))) {
+    filter.status = req.query.status;
+  }
   const [total, docs] = await Promise.all([
-    Order.countDocuments(),
-    populateOrder(Order.find().sort({ created_at: -1 }).skip(skip).limit(pageSize)),
+    Order.countDocuments(filter),
+    populateOrder(Order.find(filter).sort({ created_at: -1 }).skip(skip).limit(pageSize)),
   ]);
   await attachOrderMeta(docs, req.user);
   res.json({

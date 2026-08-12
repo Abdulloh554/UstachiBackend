@@ -159,6 +159,12 @@ const messageSerializer = (message: any) => {
     sender_role: senderRole,
     text: obj.text,
     is_read: obj.is_read,
+    edited: !!obj.edited,
+    reply_to: obj.reply_to
+      ? obj.reply_to._id
+        ? { id: String(obj.reply_to._id), text: obj.reply_to.text }
+        : String(obj.reply_to)
+      : null,
     created_at: obj.created_at,
   };
 };

@@ -2,9 +2,10 @@ import { Request, Response } from 'express';
 import { Conversation, Message } from '../models';
 import { ApiError, asyncHandler } from '../utils/http';
 import { conversationSerializer, messageSerializer } from '../utils/serializers';
-import { publishMessage } from '../ws/chat';
+import { publishMessage, publishChatEvent } from '../ws/chat';
 
 const USER_FIELDS = 'phone username role avatar language theme location_lat location_lng first_name last_name';
+const MAX_MESSAGE_LENGTH = 2_000;
 
 const isParticipant = (conversation: any, userId: any) =>
   conversation &&
@@ -12,19 +13,29 @@ const isParticipant = (conversation: any, userId: any) =>
     String(conversation.master._id || conversation.master) === String(userId));
 
 async function enrichConversations(conversations: any[], user: any) {
-  const result: any[] = [];
+  const ids = conversations.map((c) => c._id);
+  if (!ids.length) return conversations;
+
+  const [lastMessages, unreadCounts] = await Promise.all([
+    Message.aggregate([
+      { $match: { conversation: { $in: ids } } },
+      { $sort: { created_at: -1 } },
+      { $group: { _id: '$conversation', doc: { $first: '$$ROOT' } } },
+    ]),
+    Message.aggregate([
+      { $match: { conversation: { $in: ids }, is_read: false, sender: { $ne: user._id } } },
+      { $group: { _id: '$conversation', count: { $sum: 1 } } },
+    ]),
+  ]);
+
+  const lastByConv = new Map(lastMessages.map((m) => [String(m._id), m.doc]));
+  const unreadByConv = new Map(unreadCounts.map((u) => [String(u._id), u.count]));
+
   for (const conv of conversations) {
-    const last = await Message.findOne({ conversation: conv._id }).sort({ created_at: -1 });
-    const unread = await Message.countDocuments({
-      conversation: conv._id,
-      is_read: false,
-      sender: { $ne: user._id },
-    });
-    conv.last_message = last;
-    conv.unread_count = unread;
-    result.push(conv);
+    conv.last_message = lastByConv.get(String(conv._id)) || null;
+    conv.unread_count = unreadByConv.get(String(conv._id)) || 0;
   }
-  return result;
+  return conversations;
 }
 
 export const conversations = asyncHandler(async (req: Request, res: Response) => {
@@ -71,14 +82,72 @@ export const sendMessage = asyncHandler(async (req: Request, res: Response) => {
   if (!text) {
     throw new ApiError(400, "Xabar bo'sh bo'lishi mumkin emas");
   }
+  if (text.length > MAX_MESSAGE_LENGTH) {
+    throw new ApiError(400, `Xabar ${MAX_MESSAGE_LENGTH} belgidan uzun bo'lishi mumkin emas`);
+  }
+  let replyTo: any = null;
+  if (req.body.reply_to) {
+    replyTo = await Message.findOne({
+      _id: String(req.body.reply_to),
+      conversation: conv._id,
+    });
+    if (!replyTo) {
+      throw new ApiError(400, 'Javob xabari topilmadi');
+    }
+  }
   const message = await Message.create({
     conversation: conv._id,
     sender: req.user._id,
     text,
+    reply_to: replyTo ? replyTo._id : null,
   });
   conv.updated_at = new Date();
   await conv.save();
-  const populated = await Message.findById(message._id).populate('sender', USER_FIELDS);
+  const populated = await Message.findById(message._id)
+    .populate('sender', USER_FIELDS)
+    .populate('reply_to', 'text');
   publishMessage(conv._id, populated, req.user);
   res.status(201).json(messageSerializer(populated));
+});
+
+export const editMessage = asyncHandler(async (req: Request, res: Response) => {
+  const conv: any = await getConversationOrThrow(req.params.id, req.user);
+  const text = String(req.body.text || '').trim();
+  if (!text) {
+    throw new ApiError(400, "Xabar bo'sh bo'lishi mumkin emas");
+  }
+  if (text.length > MAX_MESSAGE_LENGTH) {
+    throw new ApiError(400, `Xabar ${MAX_MESSAGE_LENGTH} belgidan uzun bo'lishi mumkin emas`);
+  }
+  const message = await Message.findOne({
+    _id: req.params.mid,
+    conversation: conv._id,
+    sender: req.user._id,
+  });
+  if (!message) {
+    throw new ApiError(404, "Xabar topilmadi yoki tahrirlashga ruxsat yo'q");
+  }
+  message.text = text;
+  message.edited = true;
+  await message.save();
+  const populated = await Message.findById(message._id)
+    .populate('sender', USER_FIELDS)
+    .populate('reply_to', 'text');
+  publishChatEvent(conv._id, { type: 'message_edited', message: messageSerializer(populated) });
+  res.json(messageSerializer(populated));
+});
+
+export const deleteMessage = asyncHandler(async (req: Request, res: Response) => {
+  const conv: any = await getConversationOrThrow(req.params.id, req.user);
+  const message = await Message.findOne({
+    _id: req.params.mid,
+    conversation: conv._id,
+    sender: req.user._id,
+  });
+  if (!message) {
+    throw new ApiError(404, "Xabar topilmadi yoki o'chirishga ruxsat yo'q");
+  }
+  await message.deleteOne();
+  publishChatEvent(conv._id, { type: 'message_deleted', id: String(message._id) });
+  res.json({ ok: true });
 });

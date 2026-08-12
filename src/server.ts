@@ -22,11 +22,25 @@ export async function main(): Promise<Server> {
   app.use(helmet());
   app.use(cookieParser());
 
-  const corsOrigins: boolean | string[] =
-    env.CORS_ALLOWED_ORIGINS === '*'
-      ? true
-      : env.CORS_ALLOWED_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean);
+  const corsOrigins = env.CORS_ALLOWED_ORIGINS === '*'
+    ? true
+    : env.CORS_ALLOWED_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean);
   app.use(cors({ origin: corsOrigins, credentials: true }));
+
+  // Bearer-token clients are not susceptible to CSRF, but browser requests
+  // authenticated by the HttpOnly cookie are. CORS alone does not prevent a
+  // cross-site request from reaching this server, so reject unsafe methods
+  // whose Origin is not one of the configured frontend origins.
+  app.use((req, res, next) => {
+    const isUnsafe = !['GET', 'HEAD', 'OPTIONS'].includes(req.method);
+    const hasAuthCookie = Boolean(req.cookies?.access_token || req.cookies?.refresh_token);
+    if (!isUnsafe || !hasAuthCookie || corsOrigins === true) return next();
+    const origin = req.get('origin');
+    if (!origin || !corsOrigins.includes(origin)) {
+      return res.status(403).json({ error: 'Noto\'g\'ri so\'rov manbasi' });
+    }
+    next();
+  });
 
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: true, limit: '1mb' }));
@@ -76,7 +90,11 @@ export async function main(): Promise<Server> {
   console.log(`[server] Ustachi backend http://localhost:${env.PORT}`);
   console.log(`[server] WebSocket ws://localhost:${env.PORT}/ws/chat/:id/`);
 
-  seed().catch((err) => console.error('[seed] Xatolik:', err));
+  // Production data must be initialized explicitly with `npm run seed`.
+  // Running it on every boot can accidentally create a default admin account.
+  if (env.NODE_ENV !== 'production') {
+    seed().catch((err) => console.error('[seed] Xatolik:', err));
+  }
   return server;
 }
 

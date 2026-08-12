@@ -5,6 +5,8 @@ export interface IMessage extends Document {
   sender: any;
   text: string;
   is_read: boolean;
+  reply_to: any;
+  edited: boolean;
   created_at: Date;
 }
 
@@ -14,6 +16,8 @@ const messageSchema = new Schema<IMessage>(
     sender: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     text: { type: String, required: true },
     is_read: { type: Boolean, default: false },
+    reply_to: { type: Schema.Types.ObjectId, ref: 'Message', default: null },
+    edited: { type: Boolean, default: false },
   },
   { timestamps: { createdAt: 'created_at', updatedAt: false } }
 );
