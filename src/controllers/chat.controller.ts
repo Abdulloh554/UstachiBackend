@@ -56,7 +56,8 @@ const getConversationOrThrow = async (id: string, user: any): Promise<any> => {
     .populate('order', 'title status')
     .populate('client', USER_FIELDS)
     .populate('master', USER_FIELDS);
-  if (!isParticipant(conv, user._id)) {
+  const isAdmin = Boolean(user && (user.is_staff || user.role === 'admin'));
+  if (!isAdmin && !isParticipant(conv, user._id)) {
     throw new ApiError(404, 'Suhbat topilmadi yoki siz ishtirokchi emassiz');
   }
   return conv;

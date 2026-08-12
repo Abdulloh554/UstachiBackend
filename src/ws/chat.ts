@@ -183,7 +183,9 @@ export function setupChatWebSocket(server: Server): WebSocketServer {
           ws.close(4003, 'Suhbat topilmadi');
           return;
         }
+        const isAdmin = Boolean(user && (user.is_staff || user.role === 'admin'));
         const participant =
+          isAdmin ||
           String((conversation.client as any)._id || conversation.client) === String(user._id) ||
           String((conversation.master as any)._id || conversation.master) === String(user._id);
         if (!participant) {

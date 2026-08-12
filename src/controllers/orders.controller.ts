@@ -226,7 +226,7 @@ export const accept = asyncHandler(async (req: Request, res: Response) => {
 
   await Conversation.findOneAndUpdate(
     { order: order._id },
-    { $setOnInsert: { order: order._id, client: order.client, master: req.user._id } },
+    { $set: { order: order._id, client: order.client, master: req.user._id } },
     { upsert: true, new: true }
   );
 
