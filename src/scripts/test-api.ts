@@ -279,6 +279,21 @@ async function run(): Promise<void> {
     JSON.stringify(receipt.data)
   );
 
+  // --- Telegram link (bot) ---
+  const tgLink = await api('POST', '/auth/telegram-link/', {
+    body: { telegramChatId: 123456789, phone: '+998 90 123 45 67' },
+  });
+  check(
+    'telegram link with spaced phone',
+    tgLink.status === 200 && tgLink.data.role === 'customer' && !!tgLink.data.userId && tgLink.data.name,
+    JSON.stringify(tgLink.data)
+  );
+
+  const tgUnknown = await api('POST', '/auth/telegram-link/', {
+    body: { telegramChatId: 987654321, phone: '+998901111111' },
+  });
+  check('telegram link unknown phone -> 404', tgUnknown.status === 404);
+
   // --- Settings (owner admin sifatida) ---
   const settings = await api('GET', '/settings/', {});
   check('settings get', settings.status === 200 && settings.data.site_name === 'Ustachi');

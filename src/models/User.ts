@@ -16,6 +16,7 @@ export interface IUser extends Document {
   location_lng: number | null;
   is_staff: boolean;
   token_version: number;
+  telegram_chat_id: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -36,6 +37,7 @@ const userSchema = new Schema<IUser>(
     location_lng: { type: Number, default: null },
     is_staff: { type: Boolean, default: false },
     token_version: { type: Number, default: 0 },
+    telegram_chat_id: { type: String, default: null },
   },
   { timestamps: true }
 );

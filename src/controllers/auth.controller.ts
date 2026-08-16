@@ -212,3 +212,35 @@ export const changePassword = asyncHandler(async (req: Request, res: Response) =
   clearAuthCookies(res);
   res.json({ message: "Parol muvaffaqiyatli o'zgartirildi. Qayta kiring." });
 });
+
+// Telegram bot orqali chatId ni telefon raqami bilan bog'lash (bot uchun ochiq endpoint).
+const normalizePhone = (raw: string): string => {
+  let phone = String(raw).replace(/[\s\-\(\)]/g, '');
+  if (/^8\d{9}$/.test(phone)) phone = `+998${phone.slice(1)}`;
+  if (!/^\+998\d{9}$/.test(phone)) phone = `+${phone}`;
+  return phone;
+};
+
+export const telegramLink = asyncHandler(async (req: Request, res: Response) => {
+  const { telegramChatId, phone } = req.body;
+  if (!telegramChatId) throw new ApiError(400, 'telegramChatId talab qilinadi');
+  if (!phone) throw new ApiError(400, "Telefon raqam talab qilinadi");
+
+  const normalized = normalizePhone(phone);
+  const user = await User.findOne({ phone: normalized });
+  if (!user) {
+    throw new ApiError(404, "Bu telefon raqam tizimda topilmadi. Avval tizimda ro'yxatdan o'ting.");
+  }
+
+  await User.updateOne({ _id: user._id }, { $set: { telegram_chat_id: String(telegramChatId) } });
+
+  const roleMap: Record<string, string> = { client: 'customer', owner: 'owner', staff: 'staff' };
+  const name = [user.first_name, user.last_name].filter(Boolean).join(' ').trim() || user.username || user.phone;
+
+  res.json({
+    role: roleMap[user.role] || user.role,
+    userId: String(user._id),
+    name,
+    phone: user.phone,
+  });
+});
