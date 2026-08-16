@@ -44,7 +44,7 @@ const env: {
   ADMIN_EMAIL: process.env.ADMIN_EMAIL || 'admin@example.com',
   BOT_TOKEN: process.env.BOT_TOKEN || '',
   AI_API_KEY: process.env.AI_API_KEY || '',
-  AI_MODEL: process.env.AI_MODEL || 'gemini-2.5-flash',
+  AI_MODEL: process.env.AI_MODEL || 'gemini-3.5-flash',
 };
 
 if (isProd) {
