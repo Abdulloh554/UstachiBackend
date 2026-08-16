@@ -4,6 +4,8 @@ import { Server } from 'http';
 process.env.NODE_ENV = 'test';
 process.env.PORT = '8010';
 process.env.JWT_SECRET = 'test-secret';
+// Testlar tarmoqsiz o'tishi uchun AI kalitini bloklash (fallback yo'li tekshiriladi)
+process.env.AI_API_KEY = '';
 
 let base = 'http://localhost:8010/api';
 let ownerToken: string | null = null;
@@ -327,9 +329,38 @@ async function run(): Promise<void> {
     botReport.status === 200 &&
       typeof botReport.data.revenue !== 'undefined' &&
       typeof botReport.data.ordersCount === 'number' &&
-      Array.isArray(botReport.data.lowStock),
+      Array.isArray(botReport.data.lowStock) &&
+      botReport.data.ai_summary === null,
     JSON.stringify(botReport.data)
   );
+
+  // --- Telegram bot: AI tasniflash (key yo'q -> xavfsiz pasayish, tizim ishlayveradi) ---
+  const botClassifyNoKey = await api('POST', '/bot/orders/classify/', {
+    body: { telegram_chat_id: 123456789, text: 'kranimdan suv tomchilayapti' },
+  });
+  check('bot classify falls back when AI off', botClassifyNoKey.status === 200 && botClassifyNoKey.data.available === false);
+
+  const botFromTextNoKey = await api('POST', '/bot/orders/from_text/', {
+    body: { telegram_chat_id: 123456789, text: 'kranimdan suv tomchilayapti, ertaga kelib qarang' },
+  });
+  check('bot from_text -> manual_required when AI off', botFromTextNoKey.status === 200 && botFromTextNoKey.data.manual_required === true);
+
+  const botClassifyEmpty = await api('POST', '/bot/orders/classify/', {
+    body: { telegram_chat_id: 123456789, text: '   ' },
+  });
+  check('bot classify empty text -> 400', botClassifyEmpty.status === 400);
+
+  const aiSummaryNoKey = await api('POST', '/workshops/me/reports/summary/', {
+    token: ownerToken,
+    body: {},
+  });
+  check('report ai summary null when AI off', aiSummaryNoKey.status === 200 && aiSummaryNoKey.data.ai_summary === null);
+
+  const aiSummaryDenied = await api('POST', '/workshops/me/reports/summary/', {
+    token: clientToken,
+    body: {},
+  });
+  check('client cannot request ai summary', aiSummaryDenied.status === 403);
 
   // --- Settings (owner admin sifatida) ---
   const settings = await api('GET', '/settings/', {});

@@ -1,25 +1,20 @@
 import { Request, Response } from 'express';
-import { Order, Sale, SaleItem, Staff } from '../models';
+import { Order, Sale, SaleItem, Staff, Product } from '../models';
 import { ApiError, asyncHandler } from '../utils/http';
 import { money } from '../utils/serializers';
 import { requireOwnerWorkshop, parseDate, dayRange, toDateKey } from '../utils/workshop';
 import { ORDER_STATUSES } from '../config/constants';
+import { generateReportSummary } from '../services/ai/generateReportSummary.service';
 
-export const report = asyncHandler(async (req: Request, res: Response) => {
-  const workshop = await requireOwnerWorkshop(req.user);
-
-  const from = parseDate(req.query.from) || new Date();
-  const to = parseDate(req.query.to) || new Date();
-  if (from.getTime() > to.getTime()) {
-    throw new ApiError(400, "'from' sanasi 'to' dan oldin bo'lishi kerak");
-  }
+// Kunlik hisobotning raqamli qismini hisoblaydi (AI xulosasiz).
+async function buildDailyReport(workshopId: any, from: Date, to: Date) {
   const { start } = dayRange(from);
   const { end } = dayRange(to);
 
-  const sales = await Sale.find({ workshop: workshop._id, created_at: { $gte: start, $lte: end } });
+  const sales = await Sale.find({ workshop: workshopId, created_at: { $gte: start, $lte: end } });
   const saleIds = sales.map((s) => s._id);
   const [orders, saleItems] = await Promise.all([
-    Order.find({ workshop: workshop._id, created_at: { $gte: start, $lte: end } }),
+    Order.find({ workshop: workshopId, created_at: { $gte: start, $lte: end } }),
     SaleItem.find({ sale: { $in: saleIds } }).populate('product', 'name'),
   ]);
 
@@ -81,19 +76,82 @@ export const report = asyncHandler(async (req: Request, res: Response) => {
   }
   const daily = Array.from(dailyMap.values()).sort((a, b) => (a.date < b.date ? -1 : 1));
 
-  res.json({
+  return {
     from: toDateKey(from),
     to: toDateKey(to),
-    revenue: money(revenue),
-    expense: money(expense),
-    net_profit: money(revenue - expense),
-    orders_completed: completed.length,
-    orders_cancelled: byStatus[ORDER_STATUSES.CANCELLED] || 0,
-    orders_no_show: byStatus[ORDER_STATUSES.NO_SHOW] || 0,
-    total_orders: orders.length,
-    by_status: byStatus,
-    by_service: byService,
-    by_staff: byStaff,
+    revenue,
+    expense,
+    orders,
+    completedCount: completed.length,
+    byStatus,
+    byService,
+    byStaff,
     daily,
+  };
+}
+
+export const report = asyncHandler(async (req: Request, res: Response) => {
+  const workshop = await requireOwnerWorkshop(req.user);
+
+  const from = parseDate(req.query.from) || new Date();
+  const to = parseDate(req.query.to) || new Date();
+  if (from.getTime() > to.getTime()) {
+    throw new ApiError(400, "'from' sanasi 'to' dan oldin bo'lishi kerak");
+  }
+
+  const data = await buildDailyReport(workshop._id, from, to);
+
+  res.json({
+    from: data.from,
+    to: data.to,
+    revenue: money(data.revenue),
+    expense: money(data.expense),
+    net_profit: money(data.revenue - data.expense),
+    orders_completed: data.completedCount,
+    orders_cancelled: data.byStatus[ORDER_STATUSES.CANCELLED] || 0,
+    orders_no_show: data.byStatus[ORDER_STATUSES.NO_SHOW] || 0,
+    total_orders: data.orders.length,
+    by_status: data.byStatus,
+    by_service: data.byService,
+    by_staff: data.byStaff,
+    daily: data.daily,
   });
+});
+
+// AI xulosa: raqamli hisobotga inson tilidagi xulosa + tavsiya qo'shadi.
+// Claude ishlamay qolsa ai_summary: null qaytadi — frontend raqamli hisobotni xulosasiz ko'rsatadi.
+export const aiSummary = asyncHandler(async (req: Request, res: Response) => {
+  const workshop = await requireOwnerWorkshop(req.user);
+
+  const from = parseDate(req.body.from) || new Date();
+  const to = parseDate(req.body.to) || new Date();
+  if (from.getTime() > to.getTime()) {
+    throw new ApiError(400, "'from' sanasi 'to' dan oldin bo'lishi kerak");
+  }
+
+  const data = await buildDailyReport(workshop._id, from, to);
+
+  const [staffList, products] = await Promise.all([
+    Staff.find({ workshop: workshop._id }),
+    Product.find({ workshop: workshop._id }),
+  ]);
+  const busyStaff = staffList.filter((s: any) => !s.is_available).length;
+  const freeStaff = staffList.filter((s: any) => s.is_available).length;
+  const lowStock = products
+    .filter((p: any) => p.min_threshold > 0 && p.quantity <= p.min_threshold)
+    .map((p: any) => ({ name: p.name, quantity: p.quantity, threshold: p.min_threshold }));
+
+  const summary = await generateReportSummary({
+    date: data.from === data.to ? data.from : `${data.from} — ${data.to}`,
+    revenue: data.revenue,
+    ordersCount: data.orders.length,
+    completedCount: data.completedCount,
+    cancelledCount: data.byStatus[ORDER_STATUSES.CANCELLED] || 0,
+    noShowCount: data.byStatus[ORDER_STATUSES.NO_SHOW] || 0,
+    busyStaff,
+    freeStaff,
+    lowStock,
+  });
+
+  res.json({ ai_summary: summary });
 });

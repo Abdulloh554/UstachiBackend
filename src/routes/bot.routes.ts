@@ -7,6 +7,8 @@ const router = Router();
 
 router.get('/services/', botController.services);
 router.post('/orders/', botAuth, createOrder);
+router.post('/orders/classify/', botAuth, botController.classifyText);
+router.post('/orders/from_text/', botAuth, botController.createOrderFromText);
 router.get('/orders/active/', botAuth, botController.activeOrder);
 router.post('/orders/cancel/', botAuth, botController.cancelActiveOrder);
 router.get('/staff/today/', botAuth, botController.staffToday);

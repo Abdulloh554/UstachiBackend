@@ -119,7 +119,6 @@ export const create = asyncHandler(async (req: Request, res: Response) => {
   const isOwner = req.user.role === 'owner' || req.user.is_staff;
 
   const { service_id, service_type = '', description = '', address = '', scheduled_at, client_id } = req.body;
-
   let client: any = null;
   let client_name = String(req.body.client_name || '').trim();
   let client_phone = String(req.body.client_phone || '').trim();
@@ -161,6 +160,23 @@ export const create = asyncHandler(async (req: Request, res: Response) => {
     throw new ApiError(400, "Rejalashtirilgan vaqt noto'g'ri");
   }
 
+  // AI tasniflashdan kelgan qo'shimcha maydonlar (ixtiyoriy)
+  const estimatedDuration = req.body.estimated_duration_minutes;
+  const estimated_duration_minutes =
+    estimatedDuration === undefined || estimatedDuration === null
+      ? null
+      : Math.round(Number(estimatedDuration));
+  if (estimated_duration_minutes !== null && (!Number.isFinite(estimated_duration_minutes) || estimated_duration_minutes < 5 || estimated_duration_minutes > 1440)) {
+    throw new ApiError(400, "Taxminiy davomiylik noto'g'ri");
+  }
+  const urgency =
+    req.body.urgency === undefined || req.body.urgency === null
+      ? null
+      : String(req.body.urgency).trim();
+  if (urgency !== null && !['past', "o'rta", 'yuqori'].includes(urgency)) {
+    throw new ApiError(400, "Shoshilinchlik darajasi noto'g'ri");
+  }
+
   const queueNumber = await nextQueueNumber(workshop._id);
 
   // Narx xizmat turidan olinadi; egasi qo'lda o'zgartirishi mumkin, mijoz o'zi narx qo'ya olmaydi
@@ -190,6 +206,8 @@ export const create = asyncHandler(async (req: Request, res: Response) => {
     service_type: resolvedServiceType,
     description,
     price,
+    estimated_duration_minutes,
+    urgency,
     status: assignedStaff ? ORDER_STATUSES.ASSIGNED : ORDER_STATUSES.QUEUED,
     queue_number: queueNumber,
     scheduled_at: when,

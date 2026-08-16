@@ -53,5 +53,6 @@ router.put(
 router.delete('/me/inventory/:id', requireRole('owner'), workshopsController.inventoryRemove);
 
 router.get('/me/reports/', requireRole('owner'), reportsController.report);
+router.post('/me/reports/summary/', requireRole('owner'), reportsController.aiSummary);
 
 export default router;

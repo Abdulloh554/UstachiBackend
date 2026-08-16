@@ -11,6 +11,8 @@ export interface IOrder extends Document {
   service_type: string;
   description: string;
   price: number | null;
+  estimated_duration_minutes: number | null;
+  urgency: string | null;
   status: string;
   queue_number: number;
   scheduled_at: Date;
@@ -34,6 +36,8 @@ const orderSchema = new Schema<IOrder>(
     service_type: { type: String, default: '' },
     description: { type: String, default: '' },
     price: { type: Number, default: null },
+    estimated_duration_minutes: { type: Number, default: null },
+    urgency: { type: String, default: null },
     status: {
       type: String,
       enum: Object.values(ORDER_STATUSES),

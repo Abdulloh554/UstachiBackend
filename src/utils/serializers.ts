@@ -86,6 +86,8 @@ const orderSerializer = (order: any) => {
     service_type: obj.service_type,
     description: obj.description,
     price: money(obj.price),
+    estimated_duration_minutes: obj.estimated_duration_minutes ?? null,
+    urgency: obj.urgency ?? null,
     status: obj.status,
     queue_number: obj.queue_number,
     scheduled_at: obj.scheduled_at,
