@@ -1,6 +1,7 @@
 import { Workshop, Staff, Order } from '../models';
 import { ROLES, ORDER_STATUSES, ACTIVE_ORDER_STATUSES } from '../config/constants';
 import { IWorkshop } from '../models/Workshop';
+import { ApiError } from './http';
 
 // Ruxsat berilgan foydalanuvchi uchun qaysi ustaxona ekanini aniqlaydi.
 // Owner o'z ustaxonasiga, staff o'zi ishlaydigan ustaxonaga bog'lanadi,
@@ -21,9 +22,7 @@ export async function resolveWorkshop(user: any): Promise<IWorkshop | null> {
 export async function requireWorkshop(user: any): Promise<IWorkshop> {
   const workshop = await resolveWorkshop(user);
   if (!workshop) {
-    const err: any = new Error('Ustaxona topilmadi');
-    err.statusCode = 404;
-    throw err;
+    throw new ApiError(404, 'Ustaxona topilmadi');
   }
   return workshop;
 }
@@ -31,9 +30,7 @@ export async function requireWorkshop(user: any): Promise<IWorkshop> {
 export async function requireOwnerWorkshop(user: any): Promise<IWorkshop> {
   const workshop = await resolveWorkshop(user);
   if (!workshop || String(workshop.owner) !== String(user._id)) {
-    const err: any = new Error('Siz bu ustaxona egasi emassiz');
-    err.statusCode = 403;
-    throw err;
+    throw new ApiError(403, 'Siz bu ustaxona egasi emassiz');
   }
   return workshop;
 }
