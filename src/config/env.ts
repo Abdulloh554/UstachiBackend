@@ -22,6 +22,7 @@ const env: {
   ADMIN_PHONE: string;
   ADMIN_PASSWORD: string;
   ADMIN_EMAIL: string;
+  BOT_TOKEN: string;
 } = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: parseInt(process.env.PORT || '8000', 10),
@@ -39,6 +40,7 @@ const env: {
   ADMIN_PHONE: process.env.ADMIN_PHONE || '+998900000000',
   ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || (isProd ? '' : 'AdminPass123!'),
   ADMIN_EMAIL: process.env.ADMIN_EMAIL || 'admin@example.com',
+  BOT_TOKEN: process.env.BOT_TOKEN || '',
 };
 
 if (isProd) {

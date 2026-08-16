@@ -4,9 +4,16 @@ import env from '../config/env';
 
 const DEFAULT_SERVICES = [
   { name: 'Kran tuzatish', price: 80000, duration_minutes: 30 },
-  { name: 'Sim o\'tkazish', price: 200000, duration_minutes: 120 },
+  { name: 'Smesitel o\'rnatish', price: 150000, duration_minutes: 60 },
+  { name: 'Hojatxona bakachasi tuzatish', price: 70000, duration_minutes: 40 },
+  { name: 'Quvur almashtirish (metr)', price: 50000, duration_minutes: 60 },
+  { name: 'Isitish batareyasi o\'rnatish', price: 250000, duration_minutes: 120 },
+  { name: 'Suv filtri o\'rnatish', price: 90000, duration_minutes: 45 },
+  { name: 'Sim o\'tkazish (nuqta)', price: 120000, duration_minutes: 60 },
   { name: 'Rozetka o\'rnatish', price: 50000, duration_minutes: 30 },
+  { name: 'Kalit va lyustra o\'rnatish', price: 60000, duration_minutes: 40 },
   { name: 'Konditsioner o\'rnatish', price: 350000, duration_minutes: 120 },
+  { name: 'Suv isitgich (boyler) o\'rnatish', price: 180000, duration_minutes: 90 },
   { name: 'Qo\'ng\'iroq chaqiruvi (diagnostika)', price: 30000, duration_minutes: 20 },
 ];
 
@@ -55,14 +62,22 @@ export default async function seed(): Promise<void> {
     created.push('workshop');
   }
 
-  if ((await Service.countDocuments({ workshop: workshop._id })) === 0) {
-    await Service.insertMany(DEFAULT_SERVICES.map((s) => ({ workshop: workshop._id, ...s })));
-    created.push(`services (${DEFAULT_SERVICES.length})`);
+  // Xizmatlar: mavjud bo'lmaganlari nomi bo'yicha qo'shiladi (takrorlashsiz).
+  const existingServices = await Service.find({ workshop: workshop._id }).select('name');
+  const existingServiceNames = new Set(existingServices.map((s: any) => s.name));
+  const newServices = DEFAULT_SERVICES.filter((s) => !existingServiceNames.has(s.name));
+  if (newServices.length) {
+    await Service.insertMany(newServices.map((s) => ({ workshop: workshop._id, ...s })));
+    created.push(`services (+${newServices.length}, jami ${existingServices.length + newServices.length})`);
   }
 
-  if ((await Product.countDocuments({ workshop: workshop._id })) === 0) {
-    await Product.insertMany(DEFAULT_PRODUCTS.map((p) => ({ workshop: workshop._id, image: null, ...p })));
-    created.push(`products (${DEFAULT_PRODUCTS.length})`);
+  // Ombor: mavjud bo'lmagan mahsulotlar qo'shiladi (takrorlashsiz).
+  const existingProducts = await Product.find({ workshop: workshop._id }).select('name');
+  const existingProductNames = new Set(existingProducts.map((p: any) => p.name));
+  const newProducts = DEFAULT_PRODUCTS.filter((p) => !existingProductNames.has(p.name));
+  if (newProducts.length) {
+    await Product.insertMany(newProducts.map((p) => ({ workshop: workshop._id, image: null, ...p })));
+    created.push(`products (+${newProducts.length})`);
   }
 
   if (created.length) {

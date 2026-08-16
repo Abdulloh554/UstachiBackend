@@ -294,6 +294,43 @@ async function run(): Promise<void> {
   });
   check('telegram link unknown phone -> 404', tgUnknown.status === 404);
 
+  // --- Telegram bot: buyruq endpoint'lar ---
+  const tgStaff = await api('POST', '/auth/telegram-link/', {
+    body: { telegramChatId: 555002, phone: '+998902345678' },
+  });
+  check('telegram link staff phone', tgStaff.status === 200 && tgStaff.data.role === 'staff');
+
+  const tgOwner = await api('POST', '/auth/telegram-link/', {
+    body: { telegramChatId: 555001, phone: '+998900000000' },
+  });
+  check('telegram link owner phone', tgOwner.status === 200 && tgOwner.data.role === 'owner');
+
+  const botOrder = await api('POST', '/bot/orders/', {
+    body: { telegram_chat_id: 123456789, service_id: serviceId, description: 'Bot orqali buyurtma' },
+  });
+  check('bot creates order (auto-assigned)', botOrder.status === 201 && !!botOrder.data.id, JSON.stringify(botOrder.data));
+
+  const botStaffToday = await api('GET', '/bot/staff/today/?telegram_chat_id=555002', {});
+  check('bot staff today has order', botStaffToday.status === 200 && botStaffToday.data.active_count >= 1);
+
+  const botActive = await api('GET', '/bot/orders/active/?telegram_chat_id=123456789', {});
+  check('bot active order', botActive.status === 200 && botActive.data.id === botOrder.data.id);
+
+  const botCancel = await api('POST', '/bot/orders/cancel/', {
+    body: { telegram_chat_id: 123456789 },
+  });
+  check('bot cancels active order', botCancel.status === 200 && botCancel.data.status === 'cancelled');
+
+  const botReport = await api('GET', '/bot/report/daily/?telegram_chat_id=555001', {});
+  check(
+    'bot owner report',
+    botReport.status === 200 &&
+      typeof botReport.data.revenue !== 'undefined' &&
+      typeof botReport.data.ordersCount === 'number' &&
+      Array.isArray(botReport.data.lowStock),
+    JSON.stringify(botReport.data)
+  );
+
   // --- Settings (owner admin sifatida) ---
   const settings = await api('GET', '/settings/', {});
   check('settings get', settings.status === 200 && settings.data.site_name === 'Ustachi');

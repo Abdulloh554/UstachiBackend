@@ -75,4 +75,24 @@ export const attachWorkshop = asyncHandler(async (req, res, next) => {
   next();
 });
 
+// Telegram bot uchun: foydalanuvchi telegram_chat_id orqali aniqlanadi.
+// BOT_TOKEN env'da o'rnatilgan bo'lsa tekshiriladi (xavfsizlik uchun tavsiya etiladi).
+export const botAuth = asyncHandler(async (req, res, next) => {
+  const headerToken = (req.headers['x-bot-token'] as string) || '';
+  if (env.BOT_TOKEN && headerToken !== env.BOT_TOKEN) {
+    throw new ApiError(403, "Noto'g'ri bot token");
+  }
+
+  const chatId = String(req.body?.telegram_chat_id || req.query?.telegram_chat_id || '');
+  if (!chatId) {
+    throw new ApiError(400, 'telegram_chat_id talab qilinadi');
+  }
+  const user = await User.findOne({ telegram_chat_id: chatId });
+  if (!user) {
+    throw new ApiError(404, "Telegram hisob bog'lanmagan. Avval /start orqali raqamingizni ulashing.");
+  }
+  req.user = user;
+  next();
+});
+
 export { extractToken };

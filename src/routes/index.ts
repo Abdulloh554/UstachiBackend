@@ -7,6 +7,7 @@ import staffRoutes from './staff.routes';
 import workshopsRoutes from './workshops.routes';
 import chatRoutes from './chat.routes';
 import settingsRoutes from './settings.routes';
+import botRoutes from './bot.routes';
 
 const router = Router();
 
@@ -23,5 +24,6 @@ router.use('/staff/', staffRoutes);
 router.use('/workshops/', workshopsRoutes);
 router.use('/chat/', chatRoutes);
 router.use('/settings/', settingsRoutes);
+router.use('/bot/', botRoutes);
 
 export default router;
