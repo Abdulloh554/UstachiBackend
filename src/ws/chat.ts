@@ -63,7 +63,9 @@ export function publishChatEvent(conversationId: string, data: any): void {
 function parseToken(req: IncomingMessage): string {
   const cookieHeader = req.headers.cookie || '';
   const match = cookieHeader.match(/(?:^|;\s*)access_token=([^;]+)/);
-  return match ? decodeURIComponent(match[1]) : '';
+  if (match) return decodeURIComponent(match[1]);
+  const url = new URL(req.url || '/', 'http://localhost');
+  return url.searchParams.get('token') || '';
 }
 
 async function authFromToken(token: string): Promise<any | null> {

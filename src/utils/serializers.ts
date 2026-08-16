@@ -16,126 +16,134 @@ const userSerializer = (user: any) => {
     avatar: obj.avatar,
     language: obj.language,
     theme: obj.theme,
-    location_lat: obj.location_lat,
-    location_lng: obj.location_lng,
     first_name: obj.first_name,
     last_name: obj.last_name,
   };
 };
 
-const professionSerializer = (p: any) => {
-  if (!p) return null;
-  const obj = p._doc || p;
+const workshopSerializer = (workshop: any) => {
+  if (!workshop) return null;
+  const obj = workshop._doc || workshop;
+  let ownerName: string | null = null;
+  if (obj.owner && obj.owner._doc) {
+    ownerName = [obj.owner.first_name, obj.owner.last_name].filter(Boolean).join(' ').trim() || obj.owner.phone;
+  }
   return {
     id: String(obj._id),
-    name_uz: obj.name_uz,
-    name_ru: obj.name_ru,
-    icon: obj.icon,
+    name: obj.name,
+    address: obj.address,
+    phone: obj.phone,
+    work_schedule: obj.work_schedule,
+    owner: obj.owner ? String(obj.owner._id || obj.owner) : null,
+    owner_name: ownerName,
+    created_at: obj.created_at,
   };
 };
 
-const orderSerializer = (order: any, currentUser?: any) => {
-  if (!order) return null;
-  const obj = order._doc || order;
-  let my_review: { rating: number; comment: string } | null = null;
-  if (currentUser && String(obj.client._id || obj.client) === String(currentUser._id)) {
-    const review = order._my_review || obj._my_review;
-    if (review) my_review = { rating: review.rating, comment: review.comment };
-  }
-  const conversationId = order.conversation_id || obj.conversation_id;
+const serviceSerializer = (service: any) => {
+  if (!service) return null;
+  const obj = service._doc || service;
   return {
     id: String(obj._id),
+    name: obj.name,
+    price: money(obj.price),
+    duration_minutes: obj.duration_minutes,
+    is_active: obj.is_active,
+  };
+};
+
+const staffSerializer = (staff: any) => {
+  if (!staff) return null;
+  const obj = staff._doc || staff;
+  const user = obj.user && obj.user._doc ? obj.user : null;
+  return {
+    id: String(obj._id),
+    user: userSerializer(obj.user),
+    staff_name: user ? [user.first_name, user.last_name].filter(Boolean).join(' ').trim() || user.phone : obj.user ? String(obj.user._id || obj.user) : '',
+    phone: user ? user.phone : '',
+    specializations: obj.specializations || [],
+    is_available: obj.is_available,
+    experience_years: obj.experience_years,
+    workshop: obj.workshop ? String(obj.workshop._id || obj.workshop) : null,
+    created_at: obj.created_at,
+  };
+};
+
+const orderSerializer = (order: any) => {
+  if (!order) return null;
+  const obj = order._doc || order;
+  return {
+    id: String(obj._id),
+    workshop: obj.workshop ? String(obj.workshop._id || obj.workshop) : null,
     client: obj.client ? String(obj.client._id || obj.client) : null,
     client_details: userSerializer(obj.client_details || obj.client),
-    master: obj.master ? String(obj.master._id || obj.master) : null,
-    master_details: userSerializer(obj.master_details || obj.master),
-    title: obj.title,
+    client_name: obj.client_name,
+    client_phone: obj.client_phone,
+    assigned_staff: obj.assigned_staff ? String(obj.assigned_staff._id || obj.assigned_staff) : null,
+    assigned_staff_details: userSerializer(obj.assigned_staff_details || obj.assigned_staff),
+    service: obj.service ? String(obj.service._id || obj.service) : null,
+    service_details: serviceSerializer(obj.service_details || obj.service),
+    service_type: obj.service_type,
     description: obj.description,
-    profession: obj.profession ? String(obj.profession._id || obj.profession) : null,
-    status: obj.status,
-    location_lat: obj.location_lat,
-    location_lng: obj.location_lng,
-    address: obj.address,
     price: money(obj.price),
+    status: obj.status,
+    queue_number: obj.queue_number,
+    scheduled_at: obj.scheduled_at,
+    started_at: obj.started_at,
+    completed_at: obj.completed_at,
+    cancelled_reason: obj.cancelled_reason,
+    no_show_at: obj.no_show_at,
+    address: obj.address,
     created_at: obj.created_at,
     updated_at: obj.updated_at,
-    my_review,
-    conversation_id: conversationId ? String(conversationId) : null,
+    conversation_id: obj.conversation_id ? String(obj.conversation_id) : null,
   };
 };
 
-const masterWorksSerializer = (order: any) => {
-  if (!order) return null;
-  const obj = order._doc || order;
+const productSerializer = (product: any) => {
+  if (!product) return null;
+  const obj = product._doc || product;
   return {
     id: String(obj._id),
-    title: obj.title,
+    workshop: obj.workshop ? String(obj.workshop._id || obj.workshop) : null,
+    name: obj.name,
     description: obj.description,
-    address: obj.address,
+    category: obj.category,
     price: money(obj.price),
-    status: obj.status,
-    profession: professionSerializer(obj.profession),
-    rating: obj.rating !== undefined ? obj.rating : null,
+    cost_price: money(obj.cost_price),
+    quantity: obj.quantity,
+    min_threshold: obj.min_threshold,
+    unit: obj.unit,
+    low_stock: obj.min_threshold > 0 && obj.quantity <= obj.min_threshold,
+    image: obj.image,
     created_at: obj.created_at,
   };
 };
 
-const masterListSerializer = (profile: any) => {
-  if (!profile) return null;
-  const obj = profile._doc || profile;
+const saleItemSerializer = (item: any) => {
+  if (!item) return null;
+  const obj = item._doc || item;
   return {
-    id: String(obj._id),
-    user: userSerializer(obj.user),
-    professions: (obj.professions || []).map(professionSerializer),
-    bio: obj.bio,
-    rating: obj.rating,
-    rating_count: obj.rating_count,
-    is_available: obj.is_available,
-    experience_years: obj.experience_years,
+    product: obj.product ? String(obj.product._id || obj.product) : null,
+    product_name: obj.product && obj.product.name,
+    quantity: obj.quantity,
+    unit_price: money(obj.unit_price),
+    unit_cost: money(obj.unit_cost),
+    line_total: money((obj.unit_price || 0) * (obj.quantity || 0)),
   };
 };
 
-const masterProfileSerializer = (profile: any) => {
-  if (!profile) return null;
-  const obj = profile._doc || profile;
+const saleSerializer = (sale: any) => {
+  if (!sale) return null;
+  const obj = sale._doc || sale;
   return {
     id: String(obj._id),
-    user: userSerializer(obj.user),
-    professions: (obj.professions || []).map(professionSerializer),
-    bio: obj.bio,
-    rating: obj.rating,
-    rating_count: obj.rating_count,
-    is_available: obj.is_available,
-    experience_years: obj.experience_years,
-    balance: money(obj.balance),
-  };
-};
-
-const reviewSerializer = (review: any) => {
-  if (!review) return null;
-  const obj = review._doc || review;
-  return {
-    id: String(obj._id),
+    workshop: obj.workshop ? String(obj.workshop._id || obj.workshop) : null,
     order: obj.order ? String(obj.order._id || obj.order) : null,
-    client: obj.client ? String(obj.client._id || obj.client) : null,
-    master: obj.master ? String(obj.master._id || obj.master) : null,
-    rating: obj.rating,
-    comment: obj.comment,
-    created_at: obj.created_at,
-  };
-};
-
-const masterReviewSerializer = (review: any) => {
-  if (!review) return null;
-  const obj = review._doc || review;
-  return {
-    id: String(obj._id),
-    order: obj.order ? String(obj.order._id || obj.order) : null,
-    order_title: obj.order && obj.order.title,
-    client_name: obj.client && (obj.client.first_name || ''),
-    client_phone: obj.client && obj.client.phone,
-    rating: obj.rating,
-    comment: obj.comment,
+    staff: obj.staff ? String(obj.staff._id || obj.staff) : null,
+    amount: money(obj.amount),
+    payment_method: obj.payment_method,
+    items: (obj.items || []).map(saleItemSerializer),
     created_at: obj.created_at,
   };
 };
@@ -194,7 +202,7 @@ const conversationSerializer = (conversation: any, currentUser?: any) => {
     id: String(obj._id),
     order: order ? String(order._id || order) : null,
     order_id: order ? String(order._id || order) : null,
-    order_title: order ? order.title : null,
+    order_title: order ? order.service_type || order.description : null,
     order_status: order ? order.status : null,
     client: clientId,
     client_details: userSerializer(obj.client_details || obj.client),
@@ -210,107 +218,16 @@ const conversationSerializer = (conversation: any, currentUser?: any) => {
   };
 };
 
-const storeSerializer = (store: any) => {
-  if (!store) return null;
-  const obj = store._doc || store;
-  let ownerName: string | null = null;
-  if (obj.user && obj.user._doc) {
-    ownerName = [obj.user.first_name, obj.user.last_name].filter(Boolean).join(' ').trim();
-  }
-  return {
-    id: String(obj._id),
-    name: obj.name,
-    description: obj.description,
-    category: obj.category,
-    phone: obj.phone,
-    address: obj.address,
-    logo: obj.logo,
-    balance: money(obj.balance),
-    owner_name: ownerName,
-    created_at: obj.created_at,
-  };
-};
-
-const productSerializer = (product: any) => {
-  if (!product) return null;
-  const obj = product._doc || product;
-  return {
-    id: String(obj._id),
-    store: obj.store ? String(obj.store._id || obj.store) : null,
-    store_name: obj.store && obj.store.name,
-    name: obj.name,
-    description: obj.description,
-    category: obj.category,
-    price: money(obj.price),
-    cost_price: money(obj.cost_price),
-    quantity: obj.quantity,
-    image: obj.image,
-    created_at: obj.created_at,
-  };
-};
-
-const favoriteSerializer = (favorite: any) => {
-  if (!favorite) return null;
-  const obj = favorite._doc || favorite;
-  return {
-    id: String(obj._id),
-    product: productSerializer(obj.product),
-    created_at: obj.created_at,
-  };
-};
-
-const cartItemSerializer = (item: any) => {
-  if (!item) return null;
-  const obj = item._doc || item;
-  return {
-    id: String(obj._id),
-    product: productSerializer(obj.product),
-    quantity: obj.quantity,
-  };
-};
-
-const saleItemSerializer = (item: any) => {
-  if (!item) return null;
-  const obj = item._doc || item;
-  return {
-    product: obj.product ? String(obj.product._id || obj.product) : null,
-    product_name: obj.product && obj.product.name,
-    quantity: obj.quantity,
-    unit_price: money(obj.unit_price),
-    unit_cost: money(obj.unit_cost),
-    line_total: money((obj.unit_price || 0) * (obj.quantity || 0)),
-  };
-};
-
-const saleSerializer = (sale: any) => {
-  if (!sale) return null;
-  const obj = sale._doc || sale;
-  return {
-    id: String(obj._id),
-    store: obj.store ? String(obj.store._id || obj.store) : null,
-    store_name: obj.store && obj.store.name,
-    total: money(obj.total),
-    items: (obj.items || []).map(saleItemSerializer),
-    created_at: obj.created_at,
-  };
-};
-
 export {
   money,
   userSerializer,
-  professionSerializer,
+  workshopSerializer,
+  staffSerializer,
+  serviceSerializer,
   orderSerializer,
-  masterWorksSerializer,
-  masterListSerializer,
-  masterProfileSerializer,
-  reviewSerializer,
-  masterReviewSerializer,
-  messageSerializer,
-  conversationSerializer,
-  storeSerializer,
   productSerializer,
-  favoriteSerializer,
-  cartItemSerializer,
   saleItemSerializer,
   saleSerializer,
+  messageSerializer,
+  conversationSerializer,
 };

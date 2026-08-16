@@ -13,6 +13,5 @@ router.get('/profile/', authRequired, authController.profile);
 router.patch('/profile/', authRequired, upload.single('avatar'), verifyUpload, authController.updateProfile);
 router.put('/profile/', authRequired, upload.single('avatar'), verifyUpload, authController.updateProfile);
 router.post('/change-password/', authRequired, authController.changePassword);
-router.get('/professions/', authController.professions);
 
 export default router;

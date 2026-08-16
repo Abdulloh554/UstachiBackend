@@ -1,18 +1,21 @@
 import { Router } from 'express';
-import { authRequired, requireRole } from '../middleware/auth';
+import { authRequired, requireRole, attachWorkshop } from '../middleware/auth';
 import * as ordersController from '../controllers/orders.controller';
 
 const router = Router();
 
-router.get('/', authRequired, ordersController.list);
-router.post('/', authRequired, requireRole('client'), ordersController.create);
-router.get('/:id', authRequired, ordersController.detail);
-router.put('/:id', authRequired, ordersController.update);
-router.patch('/:id', authRequired, ordersController.update);
-router.delete('/:id', authRequired, ordersController.remove);
-router.post('/:id/accept/', authRequired, requireRole('master'), ordersController.accept);
-router.post('/:id/cancel/', authRequired, ordersController.cancel);
-router.post('/:id/update_status/', authRequired, requireRole('master'), ordersController.updateStatus);
-router.get('/:id/logs/', authRequired, ordersController.logs);
+router.use(authRequired, attachWorkshop);
+
+router.get('/', ordersController.list);
+router.post('/', requireRole('owner', 'client'), ordersController.create);
+router.get('/queue/', ordersController.queue);
+router.get('/:id', ordersController.detail);
+router.put('/:id', ordersController.update);
+router.patch('/:id', ordersController.update);
+router.post('/:id/assign/', requireRole('owner'), ordersController.assign);
+router.post('/:id/update_status/', ordersController.updateStatus);
+router.post('/:id/cancel/', ordersController.cancel);
+router.post('/:id/consume/', ordersController.consume);
+router.get('/:id/logs/', ordersController.logs);
 
 export default router;

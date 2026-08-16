@@ -1,22 +1,27 @@
 import { Schema, model, Document } from 'mongoose';
 
 export interface ISale extends Document {
-  user: any;
-  store: any;
-  total: number;
+  workshop: any;
+  order: any;
+  staff: any;
+  amount: number;
+  payment_method: string;
   created_at: Date;
 }
 
 const saleSchema = new Schema<ISale>(
   {
-    user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    store: { type: Schema.Types.ObjectId, ref: 'Store', required: true },
-    total: { type: Number, required: true },
+    workshop: { type: Schema.Types.ObjectId, ref: 'Workshop', required: true },
+    order: { type: Schema.Types.ObjectId, ref: 'Order', default: null },
+    staff: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+    amount: { type: Number, default: 0 },
+    payment_method: { type: String, default: 'cash' },
   },
   { timestamps: { createdAt: 'created_at', updatedAt: false } }
 );
 
-saleSchema.index({ created_at: -1 });
+saleSchema.index({ workshop: 1, created_at: -1 });
+saleSchema.index({ order: 1 }, { unique: true, sparse: true });
 
 saleSchema.virtual('items', {
   ref: 'SaleItem',

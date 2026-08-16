@@ -2,41 +2,58 @@ import { Schema, model, Document } from 'mongoose';
 import { ORDER_STATUSES } from '../config/constants';
 
 export interface IOrder extends Document {
+  workshop: any;
   client: any;
-  master: any;
-  title: string;
+  client_name: string;
+  client_phone: string;
+  assigned_staff: any;
+  service: any;
+  service_type: string;
   description: string;
-  profession: any;
-  status: string;
-  location_lat: number;
-  location_lng: number;
-  address: string;
   price: number | null;
+  status: string;
+  queue_number: number;
+  scheduled_at: Date;
+  started_at: Date | null;
+  completed_at: Date | null;
+  cancelled_reason: string;
+  no_show_at: Date | null;
+  address: string;
   created_at: Date;
   updated_at: Date;
 }
 
 const orderSchema = new Schema<IOrder>(
   {
-    client: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    master: { type: Schema.Types.ObjectId, ref: 'User', default: null },
-    title: { type: String, required: true },
-    description: { type: String, required: true },
-    profession: { type: Schema.Types.ObjectId, ref: 'Profession', default: null },
+    workshop: { type: Schema.Types.ObjectId, ref: 'Workshop', required: true },
+    client: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+    client_name: { type: String, default: '' },
+    client_phone: { type: String, default: '' },
+    assigned_staff: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+    service: { type: Schema.Types.ObjectId, ref: 'Service', default: null },
+    service_type: { type: String, default: '' },
+    description: { type: String, default: '' },
+    price: { type: Number, default: null },
     status: {
       type: String,
       enum: Object.values(ORDER_STATUSES),
-      default: ORDER_STATUSES.NEW,
+      default: ORDER_STATUSES.QUEUED,
     },
-    location_lat: { type: Number, required: true },
-    location_lng: { type: Number, required: true },
+    queue_number: { type: Number, default: 0 },
+    scheduled_at: { type: Date, default: null },
+    started_at: { type: Date, default: null },
+    completed_at: { type: Date, default: null },
+    cancelled_reason: { type: String, default: '' },
+    no_show_at: { type: Date, default: null },
     address: { type: String, default: '' },
-    price: { type: Number, default: null },
   },
   { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } }
 );
 
-orderSchema.index({ created_at: -1 });
+orderSchema.index({ workshop: 1, created_at: -1 });
+orderSchema.index({ workshop: 1, status: 1 });
+orderSchema.index({ assigned_staff: 1, status: 1 });
+orderSchema.index({ client: 1, created_at: -1 });
 
 orderSchema.set('toJSON', {
   versionKey: false,

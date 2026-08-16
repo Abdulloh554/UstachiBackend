@@ -12,6 +12,7 @@ import connectDB from './config/db';
 import routes from './routes';
 import { notFound, errorHandler } from './utils/http';
 import { setupChatWebSocket } from './ws/chat';
+import { startScheduler } from './scheduler';
 import seed from './scripts/seed';
 
 export async function main(): Promise<Server> {
@@ -89,6 +90,8 @@ export async function main(): Promise<Server> {
   await new Promise<void>((resolve) => server.listen(env.PORT, resolve));
   console.log(`[server] Ustachi backend http://localhost:${env.PORT}`);
   console.log(`[server] WebSocket ws://localhost:${env.PORT}/ws/chat/:id/`);
+
+  startScheduler();
 
   // Production data must be initialized explicitly with `npm run seed`.
   // Running it on every boot can accidentally create a default admin account.

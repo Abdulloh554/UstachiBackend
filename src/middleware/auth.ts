@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { User } from '../models';
+import { User, Workshop, Staff } from '../models';
 import env from '../config/env';
+import { ROLES } from '../config/constants';
 import { ApiError, asyncHandler } from '../utils/http';
 
 const JWT_OPTIONS: jwt.VerifyOptions = { algorithms: ['HS256'] };
@@ -59,5 +60,19 @@ export const requireAdmin = (req: Request, res: Response, next: NextFunction) =>
   }
   next();
 };
+
+// Ustaxona scope'ini foydalanuvchiga biriktiradi: owner o'z ustaxonasi,
+// staff o'zi ishlaydigan ustaxonasiga bog'lanadi. Mijozga tegishli emas.
+export const attachWorkshop = asyncHandler(async (req, res, next) => {
+  if (!req.user) return next();
+  if (req.user.role === ROLES.OWNER) {
+    const workshop = await Workshop.findOne({ owner: req.user._id });
+    req.user._workshop_id = workshop ? String(workshop._id) : null;
+  } else if (req.user.role === ROLES.STAFF) {
+    const staff = await Staff.findOne({ user: req.user._id });
+    req.user._workshop_id = staff ? String(staff.workshop) : null;
+  }
+  next();
+});
 
 export { extractToken };

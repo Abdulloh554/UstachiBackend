@@ -1,11 +1,11 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { User, Profession, MasterProfile } from '../models';
+import { User, Workshop } from '../models';
 import env from '../config/env';
-import { MASTER_CONSTANTS } from '../config/constants';
+import { ROLES } from '../config/constants';
 import { ApiError, asyncHandler } from '../utils/http';
-import { userSerializer, professionSerializer } from '../utils/serializers';
+import { userSerializer } from '../utils/serializers';
 import { toMediaUrl } from '../middleware/upload';
 
 const PHONE_REGEX = /^\+998\d{9}$/;
@@ -74,16 +74,15 @@ const validatePhone = (phone: string): void => {
   }
 };
 
+// Ro'yxatdan o'tishda faqat mijoz yoki ustaxona egasi o'zi ro'yxatdan o'tadi.
+// Xodim (staff) hisobini faqat ustaxona egasi qo'shadi.
 export const register = asyncHandler(async (req: Request, res: Response) => {
   const { phone, password, username = '', first_name = '', last_name = '', role = 'client' } = req.body;
-  const profession_ids = req.body.profession_ids || [];
-  const bio = req.body.bio || '';
-  const experience_years = parseInt(req.body.experience_years, 10) || 0;
 
   validatePhone(phone);
 
-  if (!['client', 'master', 'seller'].includes(role)) {
-    throw new ApiError(400, "Ro'yxatdan o'tishda faqat client, master yoki seller roli tanlanishi mumkin.");
+  if (![ROLES.CLIENT, ROLES.OWNER].includes(role)) {
+    throw new ApiError(400, "Ro'yxatdan o'tishda faqat 'client' yoki 'owner' roli tanlanishi mumkin. Xodimlarni egasi qo'shadi.");
   }
   if (!password || String(password).length < 6) {
     throw new ApiError(400, "Parol kamida 6 belgidan iborat bo'lishi kerak.");
@@ -92,10 +91,6 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
   const existing = await User.findOne({ phone });
   if (existing) {
     throw new ApiError(400, "Bu telefon raqam allaqachon ro'yxatdan o'tgan.");
-  }
-
-  if (role === 'master' && (!profession_ids || profession_ids.length === 0)) {
-    throw new ApiError(400, "Master ro'yxatdan o'tishda kamida bitta kategoriya tanlashi kerak.");
   }
 
   const hashed = await bcrypt.hash(password, 10);
@@ -108,15 +103,14 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
     password: hashed,
   });
 
-  if (role === 'master') {
-    const professions = await Profession.find({ _id: { $in: profession_ids } });
-    await MasterProfile.create({
-      user: user._id,
-      professions: professions.map((p) => p._id),
-      bio,
-      experience_years,
-      balance: MASTER_CONSTANTS.INITIAL_BALANCE,
-    });
+  if (role === ROLES.OWNER) {
+    const hasWorkshop = await Workshop.findOne({ owner: user._id });
+    if (!hasWorkshop) {
+      await Workshop.create({
+        name: [first_name, last_name].filter(Boolean).join(' ') || 'Ustaxona',
+        owner: user._id,
+      });
+    }
   }
 
   res.status(201).json(userSerializer(user));
@@ -175,7 +169,7 @@ export const profile = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const updateProfile = asyncHandler(async (req: Request, res: Response) => {
-  const allowed = ['username', 'first_name', 'last_name', 'language', 'theme', 'location_lat', 'location_lng'];
+  const allowed = ['username', 'first_name', 'last_name', 'language', 'theme'];
   for (const field of allowed) {
     if (field in req.body) {
       req.user[field] = req.body[field];
@@ -217,9 +211,4 @@ export const changePassword = asyncHandler(async (req: Request, res: Response) =
   await user.save();
   clearAuthCookies(res);
   res.json({ message: "Parol muvaffaqiyatli o'zgartirildi. Qayta kiring." });
-});
-
-export const professions = asyncHandler(async (req: Request, res: Response) => {
-  const list = await Profession.find().sort({ name_uz: 1 });
-  res.json(list.map(professionSerializer));
 });

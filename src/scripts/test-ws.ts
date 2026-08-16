@@ -76,44 +76,45 @@ async function run(): Promise<void> {
   const server = await main();
   await new Promise((r) => setTimeout(r, 1500));
 
-  const profs = await api('GET', '/auth/professions/');
-  const profId = profs.data[0].id;
+  // Seed: owner + workshop + services yaratilgan
+  const pub = await api('GET', '/workshops/public/');
+  const serviceId = pub.data.services[0].id;
+
+  const loginOwner = await api('POST', '/auth/login/', { body: { phone: '+998900000000', password: 'AdminPass123!' } });
+  const ownerToken = loginOwner.data.access;
+  check('owner login', loginOwner.status === 200 && !!ownerToken);
 
   await api('POST', '/auth/register/', {
-    body: { phone: '+998901111111', password: 'secret12', first_name: 'Mijoz', role: 'client' },
+    body: { phone: '+998901111111', password: 'secret12', first_name: 'Ali', last_name: 'Aliyev', role: 'client' },
   });
-  await api('POST', '/auth/register/', {
-    body: { phone: '+998902222222', password: 'secret12', first_name: 'Usta', role: 'master', profession_ids: [profId] },
-  });
-
   const loginClient = await api('POST', '/auth/login/', { body: { phone: '+998901111111', password: 'secret12' } });
-  const loginMaster = await api('POST', '/auth/login/', { body: { phone: '+998902222222', password: 'secret12' } });
   const clientToken = loginClient.data.access;
-  const masterToken = loginMaster.data.access;
+  check('client login', loginClient.status === 200 && !!clientToken);
 
   const order = await api('POST', '/orders/', {
     token: clientToken,
     body: {
-      title: 'Test buyurtma',
-      description: 'ws test',
-      location_lat: 41.3,
-      location_lng: 69.2,
-      price: 20000,
+      service_id: serviceId,
+      description: 'ws test buyurtma',
+      scheduled_at: new Date(Date.now() + 2 * 3600 * 1000).toISOString(),
+      address: 'Toshkent, Chilonzor 1',
     },
   });
+  check('client creates order', order.status === 201, JSON.stringify(order.data));
   const orderId = order.data.id;
 
-  await api('POST', `/orders/${orderId}/accept/`, { token: masterToken });
-
-  const convos = await api('GET', '/chat/conversations/', { token: masterToken });
+  // Buyurtma yaratilishi bilan Conversation (client + workshop.owner) hosil bo'ladi
+  const convos = await api('GET', '/chat/conversations/', { token: clientToken });
+  check('conversation auto-created', convos.status === 200 && convos.data.length === 1, JSON.stringify(convos.data));
   const convId = convos.data[0].id;
 
   const wsBad = await connect(`${wsBase}/ws/chat/${convId}/?token=invalid`);
   const badClose = await waitClose(wsBad);
   check('invalid token closed 4001', badClose === 4001, `got ${badClose}`);
 
+  // Ishtirokchi bo'lmagan mijoz suhbatga kira olmaydi
   await api('POST', '/auth/register/', {
-    body: { phone: '+998903333333', password: 'secret12', role: 'seller' },
+    body: { phone: '+998903333333', password: 'secret12', first_name: 'Vali', role: 'client' },
   });
   const loginOther = await api('POST', '/auth/login/', { body: { phone: '+998903333333', password: 'secret12' } });
   const wsOther = await connect(`${wsBase}/ws/chat/${convId}/?token=${encodeURIComponent(loginOther.data.access)}`);
@@ -121,21 +122,21 @@ async function run(): Promise<void> {
   check('non-participant closed 4003', otherClose === 4003, `got ${otherClose}`);
 
   const wsClient = await connect(`${wsBase}/ws/chat/${convId}/?token=${encodeURIComponent(clientToken)}`);
-  const wsMaster = await connect(`${wsBase}/ws/chat/${convId}/?token=${encodeURIComponent(masterToken)}`);
+  const wsOwner = await connect(`${wsBase}/ws/chat/${convId}/?token=${encodeURIComponent(ownerToken)}`);
 
   const clientMessages: any[] = [];
-  const masterMessages: any[] = [];
+  const ownerMessages: any[] = [];
   wsClient.on('message', (raw: WebSocket.RawData) => clientMessages.push(JSON.parse(raw.toString())));
-  wsMaster.on('message', (raw: WebSocket.RawData) => masterMessages.push(JSON.parse(raw.toString())));
+  wsOwner.on('message', (raw: WebSocket.RawData) => ownerMessages.push(JSON.parse(raw.toString())));
 
   await new Promise((r) => setTimeout(r, 400));
 
-  wsMaster.send(JSON.stringify({ type: 'message', text: 'Assalomu alaykum!' }));
+  wsOwner.send(JSON.stringify({ type: 'message', text: 'Assalomu alaykum!' }));
 
   await new Promise((r) => setTimeout(r, 700));
 
   check('client received ws message', clientMessages.length === 1, JSON.stringify(clientMessages));
-  check('master received ws message', masterMessages.length === 1);
+  check('owner received ws message', ownerMessages.length === 1);
   const msg = clientMessages[0];
   check(
     'ws message shape',
@@ -151,12 +152,16 @@ async function run(): Promise<void> {
   const msgs = await api('GET', `/chat/conversations/${convId}/messages/`, { token: clientToken });
   check('message persisted', msgs.status === 200 && msgs.data.length === 1 && msgs.data[0].text === 'Assalomu alaykum!');
 
-  wsMaster.send(JSON.stringify({ type: 'message', text: '   ' }));
+  wsOwner.send(JSON.stringify({ type: 'message', text: '   ' }));
   await new Promise((r) => setTimeout(r, 500));
   check('empty text not saved', clientMessages.length === 1);
 
+  // Sotuvda bo'lmagan holat ham chat orqali tekshiriladi: order referansi mavjud
+  const orderMsgs = await api('GET', `/chat/conversations/${convId}/messages/`, { token: ownerToken });
+  check('owner sees messages too', orderMsgs.status === 200 && orderMsgs.data.length === 1);
+
   wsClient.close();
-  wsMaster.close();
+  wsOwner.close();
 
   console.log(`\n=== WS Natija: ${passed} PASS, ${failed} FAIL ===`);
   await server.close();

@@ -43,7 +43,7 @@ export const conversations = asyncHandler(async (req: Request, res: Response) =>
     $or: [{ client: req.user._id }, { master: req.user._id }],
   })
     .sort({ updated_at: -1 })
-    .populate('order', 'title status')
+    .populate('order', 'status queue_number service_type')
     .populate('client', USER_FIELDS)
     .populate('master', USER_FIELDS);
 
@@ -53,7 +53,7 @@ export const conversations = asyncHandler(async (req: Request, res: Response) =>
 
 const getConversationOrThrow = async (id: string, user: any): Promise<any> => {
   const conv = await Conversation.findById(id)
-    .populate('order', 'title status')
+    .populate('order', 'status queue_number service_type')
     .populate('client', USER_FIELDS)
     .populate('master', USER_FIELDS);
   const isAdmin = Boolean(user && (user.is_staff || user.role === 'admin'));

@@ -1,18 +1,7 @@
 import bcrypt from 'bcryptjs';
-import connectDB from '../config/db';
-import {
-  User,
-  Profession,
-  MasterProfile,
-  Order,
-  OrderStatusLog,
-  Store,
-  Product,
-  Review,
-  Conversation,
-  Message,
-} from '../models';
+import { User, Workshop, Staff, Service, Order, OrderStatusLog, Sale, SaleItem, Product, Conversation, Message } from '../models';
 import { ORDER_STATUSES } from '../config/constants';
+import { nextQueueNumber } from '../utils/workshop';
 
 const DEMO_PASSWORD = 'demo1234';
 
@@ -36,288 +25,266 @@ async function getOrCreateUser(data: any) {
   return user;
 }
 
+function at(hour: number, minute = 0): Date {
+  const d = new Date();
+  d.setHours(hour, minute, 0, 0);
+  return d;
+}
+
+async function getOrCreateStaff(workshop: any, data: any, specializations: string[], experienceYears: number) {
+  const user = await getOrCreateUser(data);
+  let staff = await Staff.findOne({ user: user._id });
+  if (!staff) {
+    staff = await Staff.create({
+      user: user._id,
+      workshop: workshop._id,
+      specializations,
+      is_available: true,
+      experience_years: experienceYears,
+    });
+    log('created', `staff ${data.phone}`);
+  } else {
+    log('skipped', `staff ${data.phone}`);
+  }
+  return staff;
+}
+
+async function createOrderWithLogs(opts: {
+  workshop: any;
+  client?: any;
+  client_name: string;
+  client_phone: string;
+  staff?: any;
+  service: any;
+  description: string;
+  price: number;
+  status: string;
+  scheduled_at: Date;
+  queue_number: number;
+  address: string;
+}) {
+  const order = await Order.create({
+    workshop: opts.workshop._id,
+    client: opts.client || null,
+    client_name: opts.client_name,
+    client_phone: opts.client_phone,
+    assigned_staff: opts.staff ? opts.staff.user : null,
+    service: opts.service._id,
+    service_type: opts.service.name,
+    description: opts.description,
+    price: opts.price,
+    status: opts.status,
+    queue_number: opts.queue_number,
+    scheduled_at: opts.scheduled_at,
+    address: opts.address,
+    started_at: opts.status === ORDER_STATUSES.IN_PROGRESS || opts.status === ORDER_STATUSES.COMPLETED ? opts.scheduled_at : null,
+    completed_at: opts.status === ORDER_STATUSES.COMPLETED ? opts.scheduled_at : null,
+    no_show_at: opts.status === ORDER_STATUSES.NO_SHOW ? opts.scheduled_at : null,
+    cancelled_reason: opts.status === ORDER_STATUSES.CANCELLED ? 'Mijoz bekor qildi' : '',
+  });
+
+  const logs: any[] = [{ from_status: null, to_status: ORDER_STATUSES.QUEUED, changed_by: opts.client || opts.workshop.owner }];
+  if (opts.status === ORDER_STATUSES.ASSIGNED || opts.status === ORDER_STATUSES.IN_PROGRESS || opts.status === ORDER_STATUSES.COMPLETED) {
+    logs.push({ from_status: ORDER_STATUSES.QUEUED, to_status: ORDER_STATUSES.ASSIGNED, changed_by: opts.workshop.owner });
+  }
+  if (opts.status === ORDER_STATUSES.IN_PROGRESS || opts.status === ORDER_STATUSES.COMPLETED) {
+    logs.push({ from_status: ORDER_STATUSES.ASSIGNED, to_status: ORDER_STATUSES.IN_PROGRESS, changed_by: opts.staff ? opts.staff.user : opts.workshop.owner });
+  }
+  if (opts.status === ORDER_STATUSES.COMPLETED) {
+    logs.push({ from_status: ORDER_STATUSES.IN_PROGRESS, to_status: ORDER_STATUSES.COMPLETED, changed_by: opts.staff ? opts.staff.user : opts.workshop.owner });
+  }
+  if (opts.status === ORDER_STATUSES.CANCELLED) {
+    logs.push({ from_status: ORDER_STATUSES.QUEUED, to_status: ORDER_STATUSES.CANCELLED, changed_by: opts.client || opts.workshop.owner });
+  }
+  if (opts.status === ORDER_STATUSES.NO_SHOW) {
+    logs.push({ from_status: ORDER_STATUSES.ASSIGNED, to_status: ORDER_STATUSES.NO_SHOW, changed_by: null });
+  }
+
+  await OrderStatusLog.insertMany(
+    logs.map((l) => ({ order: order._id, ...l }))
+  );
+  return order;
+}
+
 async function run() {
-  await connectDB();
+  await import('../config/db').then((m) => m.default());
 
-  const elektrik = await Profession.findOne({ name_uz: 'Elektrik' });
-  const boyoqchi = await Profession.findOne({ name_uz: "Bo'yoqchi" });
-
-  const client1 = await getOrCreateUser({
-    phone: '+998901234567',
-    username: 'ali',
-    first_name: 'Ali',
-    last_name: 'Aliyev',
-    role: 'client',
-    language: 'uz',
-    theme: 'light',
-    location_lat: 41.3111,
-    location_lng: 69.2797,
-  });
-  const client2 = await getOrCreateUser({
-    phone: '+998905556677',
-    username: 'dilnoza',
-    first_name: 'Dilnoza',
-    last_name: 'Karimova',
-    role: 'client',
-    language: 'uz',
-    theme: 'dark',
-    location_lat: 41.3231,
-    location_lng: 69.2405,
-  });
-  const master1 = await getOrCreateUser({
-    phone: '+998902345678',
-    username: 'umid_ustoz',
-    first_name: 'Umid',
-    last_name: 'Ustoz',
-    role: 'master',
-    language: 'uz',
-    theme: 'light',
-    location_lat: 41.3111,
-    location_lng: 69.2797,
-  });
-  const master2 = await getOrCreateUser({
-    phone: '+998903456789',
-    username: 'botir',
-    first_name: 'Botir',
-    last_name: 'Bo\'yoqchi',
-    role: 'master',
-    language: 'uz',
-    theme: 'light',
-    location_lat: 41.2871,
-    location_lng: 69.2847,
-  });
-  const seller = await getOrCreateUser({
-    phone: '+998904567890',
-    username: 'jasur',
-    first_name: 'Jasur',
-    last_name: 'Sotuvchi',
-    role: 'seller',
-    language: 'uz',
-    theme: 'light',
-    location_lat: 41.2995,
-    location_lng: 69.2401,
-  });
-
-  let prof1 = await MasterProfile.findOne({ user: master1._id });
-  if (!prof1) {
-    prof1 = await MasterProfile.create({
-      user: master1._id,
-      professions: elektrik ? [elektrik._id] : [],
-      bio: "10 yillik tajribali elektrik. Hamma ish turi bo'yicha sifatli xizmat.",
-      experience_years: 10,
-      balance: 200000,
-      is_available: true,
-      rating: 5,
-      rating_count: 1,
-    });
-    log('created', 'master profile Umid');
-  } else {
-    log('skipped', 'master profile Umid');
+  const workshop: any = await Workshop.getPrimary();
+  if (!workshop) {
+    console.error('[demo] Ustaxona topilmadi. Avval serverni ishga tushiring (seed o\'zi yaratadi).');
+    process.exit(1);
   }
 
-  let prof2 = await MasterProfile.findOne({ user: master2._id });
-  if (!prof2) {
-    prof2 = await MasterProfile.create({
-      user: master2._id,
-      professions: boyoqchi ? [boyoqchi._id] : [],
-      bio: "Devor bo'yash va ta'mirlash ishlari.",
-      experience_years: 5,
-      balance: 100000,
-      is_available: true,
-      rating: 0,
-      rating_count: 0,
-    });
-    log('created', 'master profile Botir');
-  } else {
-    log('skipped', 'master profile Botir');
-  }
+  const umid = await getOrCreateStaff(
+    workshop,
+    { phone: '+998902345678', username: 'umid_ustoz', first_name: 'Umid', last_name: 'Ustoz', role: 'staff', language: 'uz', theme: 'light' },
+    ['Elektrik', 'Konditsioner'],
+    10
+  );
+  const botir = await getOrCreateStaff(
+    workshop,
+    { phone: '+998903456789', username: 'botir', first_name: 'Botir', last_name: 'Bo\'lakov', role: 'staff', language: 'uz', theme: 'dark' },
+    ['Santexnik', 'Rozetka'],
+    5
+  );
 
-  const order1 = await (async () => {
-    const existing = await Order.findOne({ title: 'Kran tuzatish', client: client1._id });
-    if (existing) {
-      log('skipped', 'order Kran tuzatish');
-      return existing;
-    }
-    const order = await Order.create({
-      client: client1._id,
-      title: 'Kran tuzatish',
+  const ali = await getOrCreateUser({ phone: '+998901234567', username: 'ali', first_name: 'Ali', last_name: 'Aliyev', role: 'client', language: 'uz', theme: 'light' });
+  const dilnoza = await getOrCreateUser({ phone: '+998905556677', username: 'dilnoza', first_name: 'Dilnoza', last_name: 'Karimova', role: 'client', language: 'uz', theme: 'dark' });
+
+  const services: any = await Service.find({ workshop: workshop._id });
+  const byName = new Map(services.map((s: any) => [s.name, s]));
+  const kran = byName.get('Kran tuzatish') || services[0];
+  const rozetka = byName.get('Rozetka o\'rnatish') || services[1];
+  const diagnostika = byName.get('Qo\'ng\'iroq chaqiruvi (diagnostika)') || services[2];
+
+  if (!(await Order.findOne({ workshop: workshop._id, client_name: 'Ali Aliyev', service_type: 'Kran tuzatish' }))) {
+    const order = await createOrderWithLogs({
+      workshop,
+      client: ali._id,
+      client_name: 'Ali Aliyev',
+      client_phone: ali.phone,
+      staff: umid,
+      service: kran,
       description: 'Oshxonadagi kran ogmoqda, tuzatib berilsa.',
-      profession: elektrik ? elektrik._id : null,
-      location_lat: 41.3111,
-      location_lng: 69.2797,
-      address: 'Toshkent, Chilonzor 1',
       price: 150000,
       status: ORDER_STATUSES.COMPLETED,
-      master: master1._id,
+      scheduled_at: at(9, 0),
+      queue_number: 1,
+      address: 'Toshkent, Chilonzor 1',
     });
-    await OrderStatusLog.insertMany([
-      { order: order._id, from_status: null, to_status: ORDER_STATUSES.NEW, changed_by: client1._id },
-      { order: order._id, from_status: ORDER_STATUSES.NEW, to_status: ORDER_STATUSES.ACCEPTED, changed_by: master1._id },
-      { order: order._id, from_status: ORDER_STATUSES.ACCEPTED, to_status: ORDER_STATUSES.COMING, changed_by: master1._id },
-      { order: order._id, from_status: ORDER_STATUSES.COMING, to_status: ORDER_STATUSES.IN_PROGRESS, changed_by: master1._id },
-      { order: order._id, from_status: ORDER_STATUSES.IN_PROGRESS, to_status: ORDER_STATUSES.COMPLETED, changed_by: master1._id },
-    ]);
-    log('created', 'order Kran tuzatish');
-    return order;
-  })();
 
-  const order2 = await (async () => {
-    const existing = await Order.findOne({ title: 'Sim o\'tkazish', client: client1._id });
-    if (existing) {
-      log('skipped', 'order Sim o\'tkazish');
-      return existing;
-    }
-    const order = await Order.create({
-      client: client1._id,
-      title: "Sim o'tkazish",
-      description: "Yangi uyda to'liq sim o'tkazish kerak, 3 xona.",
-      profession: elektrik ? elektrik._id : null,
-      location_lat: 41.3111,
-      location_lng: 69.2797,
-      address: 'Toshkent, Yunusobod 5',
-      price: 800000,
-      status: ORDER_STATUSES.NEW,
-    });
-    await OrderStatusLog.create({
+    const sale = await Sale.create({
+      workshop: workshop._id,
       order: order._id,
-      from_status: null,
-      to_status: ORDER_STATUSES.NEW,
-      changed_by: client1._id,
+      staff: umid.user,
+      amount: 150000,
+      payment_method: 'cash',
     });
-    log('created', 'order Sim o\'tkazish');
-    return order;
-  })();
-
-  const order3 = await (async () => {
-    const existing = await Order.findOne({ title: 'Devor bo\'yash', client: client2._id });
-    if (existing) {
-      log('skipped', 'order Devor bo\'yash');
-      return existing;
+    const product = await Product.findOne({ workshop: workshop._id, category: 'santexnika' });
+    if (product) {
+      await SaleItem.create({ sale: sale._id, product: product._id, quantity: 1, unit_price: product.price, unit_cost: product.cost_price });
     }
-    const order = await Order.create({
-      client: client2._id,
-      title: "Devor bo'yash",
-      description: "3 xonali kvartirani ichkaridan bo'yash.",
-      profession: boyoqchi ? boyoqchi._id : null,
-      location_lat: 41.3231,
-      location_lng: 69.2405,
-      address: 'Toshkent, Chilonzor 5',
-      price: 1200000,
+    log('created', 'order Kran tuzatish (completed) + sale');
+  } else {
+    log('skipped', 'order Kran tuzatish');
+  }
+
+  if (!(await Order.findOne({ workshop: workshop._id, client_name: 'Dilnoza Karimova', service_type: 'Rozetka o\'rnatish' }))) {
+    const order = await createOrderWithLogs({
+      workshop,
+      client: dilnoza._id,
+      client_name: 'Dilnoza Karimova',
+      client_phone: dilnoza.phone,
+      staff: umid,
+      service: rozetka,
+      description: "Yotoqxonaga 3 ta rozetka o'rnatish.",
+      price: 120000,
       status: ORDER_STATUSES.IN_PROGRESS,
-      master: master2._id,
-    });
-    await OrderStatusLog.insertMany([
-      { order: order._id, from_status: null, to_status: ORDER_STATUSES.NEW, changed_by: client2._id },
-      { order: order._id, from_status: ORDER_STATUSES.NEW, to_status: ORDER_STATUSES.ACCEPTED, changed_by: master2._id },
-      { order: order._id, from_status: ORDER_STATUSES.ACCEPTED, to_status: ORDER_STATUSES.IN_PROGRESS, changed_by: master2._id },
-    ]);
-    log('created', 'order Devor bo\'yash');
-    return order;
-  })();
-
-  const order4 = await (async () => {
-    const existing = await Order.findOne({ title: 'Shkaf yig\'ish', client: client2._id });
-    if (existing) {
-      log('skipped', 'order Shkaf yig\'ish');
-      return existing;
-    }
-    const order = await Order.create({
-      client: client2._id,
-      title: "Shkaf yig'ish",
-      description: 'Kiyim shkafini yig\'ish va devorga mahkamlash.',
-      profession: null,
-      location_lat: 41.3231,
-      location_lng: 69.2405,
+      scheduled_at: at(10, 30),
+      queue_number: 2,
       address: 'Toshkent, Chilonzor 5',
+    });
+    log('created', 'order Rozetka (in_progress)');
+  } else {
+    log('skipped', 'order Rozetka');
+  }
+
+  if (!(await Order.findOne({ workshop: workshop._id, client_name: 'Ali Aliyev', service_type: 'Konditsioner o\'rnatish' }))) {
+    const k = byName.get('Konditsioner o\'rnatish') || services[3];
+    await createOrderWithLogs({
+      workshop,
+      client: ali._id,
+      client_name: 'Ali Aliyev',
+      client_phone: ali.phone,
+      service: k,
+      description: 'Yangi konditsioner o\'rnatish, 12-split tizim.',
+      price: 350000,
+      status: ORDER_STATUSES.ASSIGNED,
+      scheduled_at: at(12, 0),
+      queue_number: 3,
+      address: 'Toshkent, Chilonzor 1',
+    });
+    log('created', 'order Konditsioner (assigned)');
+  } else {
+    log('skipped', 'order Konditsioner');
+  }
+
+  if (!(await Order.findOne({ workshop: workshop._id, client_name: 'Dilnoza Karimova', service_type: 'Qo\'ng\'iroq chaqiruvi (diagnostika)' }))) {
+    await createOrderWithLogs({
+      workshop,
+      client: dilnoza._id,
+      client_name: 'Dilnoza Karimova',
+      client_phone: dilnoza.phone,
+      service: diagnostika,
+      description: 'Yorug\'lik o\'chib-qoladi, diagnostika kerak.',
+      price: 30000,
+      status: ORDER_STATUSES.QUEUED,
+      scheduled_at: at(14, 0),
+      queue_number: 4,
+      address: 'Toshkent, Chilonzor 5',
+    });
+    log('created', 'order Diagnostika (queued)');
+  } else {
+    log('skipped', 'order Diagnostika');
+  }
+
+  if (!(await Order.findOne({ workshop: workshop._id, status: ORDER_STATUSES.NO_SHOW }))) {
+    await createOrderWithLogs({
+      workshop,
+      client: dilnoza._id,
+      client_name: 'Dilnoza Karimova',
+      client_phone: dilnoza.phone,
+      staff: botir,
+      service: diagnostika,
+      description: 'Kran almashtirish — mijoz kelmadi.',
+      price: 80000,
+      status: ORDER_STATUSES.NO_SHOW,
+      scheduled_at: at(15, 0),
+      queue_number: 5,
+      address: 'Toshkent, Chilonzor 5',
+    });
+    log('created', 'order no_show (mijoz kelmadi)');
+  } else {
+    log('skipped', 'order no_show');
+  }
+
+  if (!(await Order.findOne({ workshop: workshop._id, status: ORDER_STATUSES.CANCELLED }))) {
+    await createOrderWithLogs({
+      workshop,
+      client: ali._id,
+      client_name: 'Ali Aliyev',
+      client_phone: ali.phone,
+      service: byName.get('Sim o\'tkazish') || services[1],
+      description: 'Sim o\'tkazish — mijoz keyinga surdi.',
       price: 200000,
-      status: ORDER_STATUSES.NEW,
+      status: ORDER_STATUSES.CANCELLED,
+      scheduled_at: at(16, 0),
+      queue_number: 6,
+      address: 'Toshkent, Chilonzor 1',
     });
-    await OrderStatusLog.create({
-      order: order._id,
-      from_status: null,
-      to_status: ORDER_STATUSES.NEW,
-      changed_by: client2._id,
-    });
-    log('created', 'order Shkaf yig\'ish');
-    return order;
-  })();
-
-  const review = await (async () => {
-    const existing = await Review.findOne({ order: order1._id });
-    if (existing) {
-      log('skipped', 'review Kran tuzatish');
-      return existing;
-    }
-    const r = await Review.create({
-      order: order1._id,
-      client: client1._id,
-      master: master1._id,
-      rating: 5,
-      comment: "Ajoyib usta! Ishi sifatli, o'z vaqtida keldi.",
-    });
-    log('created', 'review Kran tuzatish');
-    return r;
-  })();
-
-  let store = await Store.findOne({ user: seller._id });
-  if (!store) {
-    store = await Store.create({
-      user: seller._id,
-      name: 'Ali Hardware',
-      description: 'Qurilish asboblari va materiallari',
-      category: 'qurilish',
-      phone: '+998904567890',
-      address: 'Toshkent, Chorsu bozori',
-      balance: 0,
-    });
-    log('created', 'store Ali Hardware');
+    log('created', 'order cancelled');
   } else {
-    log('skipped', 'store Ali Hardware');
+    log('skipped', 'order cancelled');
   }
 
-  const productData = [
-    { name: 'Drel', description: 'Elektr drel, 650W', category: 'asbob', price: 500000, cost_price: 400000, quantity: 10 },
-    { name: "Bolg'a", description: 'O\'rta o\'lchamli bolg\'a', category: 'asbob', price: 120000, cost_price: 80000, quantity: 25 },
-    { name: 'Burama vintlar', description: 'O\'z-o\'zidan burama vintlar, 100 dona', category: 'material', price: 45000, cost_price: 30000, quantity: 100 },
-  ];
-  for (const p of productData) {
-    const existing = await Product.findOne({ name: p.name, store: store._id });
-    if (existing) {
-      log('skipped', `product ${p.name}`);
-      continue;
-    }
-    await Product.create({ store: store._id, image: null, ...p });
-    log('created', `product ${p.name}`);
-  }
-
-  let conversation = await Conversation.findOne({ order: order3._id });
-  if (!conversation) {
-    conversation = await Conversation.create({
-      order: order3._id,
-      client: client2._id,
-      master: master2._id,
+  const convOrder = await Order.findOne({ workshop: workshop._id, client_name: 'Dilnoza Karimova', service_type: 'Rozetka o\'rnatish' });
+  if (convOrder && !(await Conversation.findOne({ order: convOrder._id }))) {
+    const conv = await Conversation.create({
+      order: convOrder._id,
+      client: dilnoza._id,
+      master: workshop.owner,
     });
-    const msg1 = await Message.create({
-      conversation: conversation._id,
-      sender: master2._id,
-      text: 'Salom! Devor bo\'yashga tayyorman.',
-    });
-    const msg2 = await Message.create({
-      conversation: conversation._id,
-      sender: client2._id,
-      text: 'Yaxshi, ertaga kelishingiz mumkinmi?',
-    });
-    const msg3 = await Message.create({
-      conversation: conversation._id,
-      sender: master2._id,
-      text: 'Kelishdik, ertaga soat 9 da bo\'laman.',
-    });
-    conversation.updated_at = msg3.created_at;
-    await conversation.save();
-    log('created', 'conversation + 3 messages');
+    const m1 = await Message.create({ conversation: conv._id, sender: umid.user, text: 'Salom! Bugun tushga yaqin boraman.' });
+    const m2 = await Message.create({ conversation: conv._id, sender: dilnoza._id, text: 'Yaxshi, kuting bo\'laman.' });
+    conv.updated_at = m2.created_at;
+    await conv.save();
+    log('created', 'conversation + 2 messages');
   } else {
-    log('skipped', 'conversation Devor bo\'yash');
+    log('skipped', 'conversation');
   }
+
+  // Yangi buyurtmalar uchun navbat raqami hisobga olinishi uchun demo raqamlarni moslashtiramiz
+  await nextQueueNumber(workshop._id);
 
   console.log('\n=== DEMO SEED ===');
   if (created.length) {
@@ -329,9 +296,9 @@ async function run() {
     for (const s of skipped) console.log('  =', s);
   }
   console.log(`\nParollar: barcha demo hisoblar uchun parol = ${DEMO_PASSWORD}`);
-  console.log('Mijozlar: +998901234567, +998905556677');
-  console.log('Ustalar: +998902345678, +998903456789');
-  console.log('Sotuvchi: +998904567890');
+  console.log(`Ega (owner): ${workshop.owner ? await User.findById(workshop.owner).then((u) => u?.phone) : ''}`);
+  console.log('Xodimlar: +998902345678 (Umid), +998903456789 (Botir)');
+  console.log('Mijozlar: +998901234567 (Ali), +998905556677 (Dilnoza)');
 
   await (await import('mongoose')).disconnect();
 }
