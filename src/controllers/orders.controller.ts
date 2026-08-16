@@ -17,7 +17,7 @@ import {
   PAYMENT_METHODS,
 } from '../config/constants';
 import { ApiError, asyncHandler } from '../utils/http';
-import { orderSerializer } from '../utils/serializers';
+import { orderSerializer, saleItemSerializer, money } from '../utils/serializers';
 import { parsePage, paginatedResponse } from '../utils/pagination';
 import {
   resolveWorkshop,
@@ -521,6 +521,40 @@ export const logs = asyncHandler(async (req: Request, res: Response) => {
       created_at: log.created_at,
     }))
   );
+});
+
+// ============================== RECEIPT (chek) ==============================
+
+export const receipt = asyncHandler(async (req: Request, res: Response) => {
+  const order = await populateOrder(Order.findById(req.params.id)).populate('workshop', 'name phone address');
+  if (!order) throw new ApiError(404, 'Buyurtma topilmadi');
+  if (!canViewOrder(order, req.user)) {
+    throw new ApiError(403, "Siz bu buyurtma uchun chek ko'ra olmaysiz");
+  }
+
+  const sale = await Sale.findOne({ order: order._id }).populate('staff', USER_FIELDS);
+  const items = sale
+    ? await SaleItem.find({ sale: sale._id }).populate('product', 'name')
+    : [];
+
+  const workshop = order.workshop && order.workshop._doc ? order.workshop : null;
+  const staff = sale && sale.staff && sale.staff._doc ? sale.staff : null;
+  const itemsTotal = items.reduce((sum: number, i: any) => sum + (i.unit_price || 0) * (i.quantity || 0), 0);
+
+  res.json({
+    order: orderSerializer(order),
+    workshop: workshop
+      ? { name: workshop.name, phone: workshop.phone, address: workshop.address }
+      : null,
+    staff_name: staff
+      ? [staff.first_name, staff.last_name].filter(Boolean).join(' ').trim() || staff.phone
+      : null,
+    items: items.map(saleItemSerializer),
+    items_total: money(itemsTotal),
+    order_price: money(order.price),
+    paid: money(sale ? sale.amount : order.price),
+    created_at: order.created_at,
+  });
 });
 
 // ============================== QUEUE (today) ==============================

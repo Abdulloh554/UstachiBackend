@@ -17,5 +17,6 @@ router.post('/:id/update_status/', ordersController.updateStatus);
 router.post('/:id/cancel/', ordersController.cancel);
 router.post('/:id/consume/', ordersController.consume);
 router.get('/:id/logs/', ordersController.logs);
+router.get('/:id/receipt/', ordersController.receipt);
 
 export default router;

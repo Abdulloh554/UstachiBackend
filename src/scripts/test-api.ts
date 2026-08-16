@@ -267,6 +267,18 @@ async function run(): Promise<void> {
   const logs = await api('GET', `/orders/${orderId}/logs/`, { token: clientToken });
   check('order logs', logs.status === 200 && logs.data.length >= 3);
 
+  // --- Receipt (chek) ---
+  const receipt = await api('GET', `/orders/${orderId}/receipt/`, { token: clientToken });
+  check(
+    'order receipt',
+    receipt.status === 200 &&
+      receipt.data.order.id === orderId &&
+      receipt.data.workshop &&
+      receipt.data.workshop.name &&
+      Array.isArray(receipt.data.items),
+    JSON.stringify(receipt.data)
+  );
+
   // --- Settings (owner admin sifatida) ---
   const settings = await api('GET', '/settings/', {});
   check('settings get', settings.status === 200 && settings.data.site_name === 'Ustachi');
