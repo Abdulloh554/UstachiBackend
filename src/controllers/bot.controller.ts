@@ -132,6 +132,10 @@ export const createOrderFromText = asyncHandler(async (req: Request, res: Respon
     });
   }
 
+  if (!classification.relevant) {
+    return res.json({ relevant: false, service_type: classification.service_type });
+  }
+
   const matched = findMatchedService(catalog, classification.service_type);
   req.body = {
     ...(matched ? { service_id: matched.id } : { service_type: classification.service_type }),

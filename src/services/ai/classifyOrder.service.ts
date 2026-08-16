@@ -15,6 +15,7 @@ export interface OrderClassification {
   urgency: Urgency;
   summary: string;
   confidence: number;
+  relevant: boolean;
   needs_clarification: boolean;
   clarification_question: string | null;
 }
@@ -29,10 +30,11 @@ Foydalanuvchi muammosini tavsiflab, muammosiz matn yuboradi. Sizning vazifangiz:
 3) Shoshilinchlikni baholash (urgency): "past", "o'rta" yoki "yuqori".
 4) Xulosa yozish (summary) — 1 jumla, o'zbek tilida.
 5) confidence — tasnifga ishonch darajasi 0 dan 1 gacha.
-6) Matn noaniq, qisqa yoki xizmat turlariga mos kelmaydigan bo'lsa needs_clarification=true qiling va clarification_question bilan aniqlashtiruvchi savol bering (o'zbek tilida).
+6) Agar mijozning muammosi ustaxona xizmatlariga (santexnika, elektr, ta'mirlash-o'rnatish) umuman aloqasi bo'lmasa — masalan, noutbuk/telefon/mashina ta'mirlash — relevant=false qiling, service_type'ni o'zbekcha bering va aniqlashtirish so'ramang. Aks holda relevant=true.
+7) Matn noaniq, qisqa yoki xizmat turlariga mos kelmaydigan bo'lsa needs_clarification=true qiling va clarification_question bilan aniqlashtiruvchi savol bering (o'zbek tilida).
 
 QUIDDAGI QAT'IY JSON FORMATDA JAVOB BERING, BOSHQA HECH NARSA YOZMANG:
-{"service_type": "quduq", "estimated_duration_minutes": 30, "urgency": "past", "confidence": 0.9, "summary": "...", "needs_clarification": false, "clarification_question": null}`;
+{"service_type": "quduq", "estimated_duration_minutes": 30, "urgency": "past", "confidence": 0.9, "summary": "...", "relevant": true, "needs_clarification": false, "clarification_question": null}`;
 
 const CONFIDENCE_CLARIFICATION_THRESHOLD = 0.5;
 
@@ -60,9 +62,16 @@ function validateClassification(raw: any): OrderClassification {
   let needs_clarification = rawNeedsClarification;
   let clarification_question = rawQuestion;
 
+  const relevant = typeof raw.relevant === 'boolean' ? raw.relevant : true;
+
   // Ishonch past bo'lsa — aniqlashtirishni majburan yoqamiz (noto'g'ri tasniflash oldini olish).
   if (hasValidConfidence && confNum < CONFIDENCE_CLARIFICATION_THRESHOLD) {
     needs_clarification = true;
+  }
+
+  if (!relevant) {
+    needs_clarification = false;
+    clarification_question = null;
   }
 
   if (needs_clarification) {
@@ -83,6 +92,7 @@ function validateClassification(raw: any): OrderClassification {
     urgency: hasValidUrgency ? (urgencyRaw as Urgency) : "o'rta",
     summary,
     confidence: hasValidConfidence ? confNum : 0,
+    relevant,
     needs_clarification,
     clarification_question,
   };
